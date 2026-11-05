@@ -16,19 +16,21 @@ Sviluppo con hot reload: `npm run dev` (Vite su :5173, server su :7878). Test: `
 
 ## Android TV e Fire TV (Firestick)
 
-App nativa in : la stessa interfaccia in una WebView chiusa e la riproduzione nel player **ExoPlayer** (decodifica hardware, HLS/TS/MP4/MKV, audio e sottotitoli, zapping con ↑/↓ o CH+/CH−).
+App nativa in `android/`: la stessa interfaccia in una WebView chiusa e la riproduzione nel player **ExoPlayer** (decodifica hardware, HLS/TS/MP4/MKV, audio e sottotitoli, zapping con ↑/↓ o CH+/CH−). Funziona da Fire OS 6 / Android 6 in su.
 
 **Installazione su Firestick con Downloader**
 1. Sulla Fire TV: *Impostazioni → La mia Fire TV → Opzioni sviluppatore → Installa app sconosciute* → attiva **Downloader**.
-2. Apri Downloader e digita il codice ORBITA (oppure l'URL ).
+2. Apri Downloader e digita il codice ORBITA (oppure l'URL `https://github.com/<utente>/<repo>/releases/latest/download/orbita.apk`).
 3. Installa e apri ORBITA.
 
-L'URL  punta sempre all'ultima versione: il codice Downloader creato su [go.aftvnews.com](https://go.aftvnews.com/) non va mai cambiato.
+L'URL `releases/latest/download/orbita.apk` punta sempre all'ultima versione: il codice Downloader creato su [go.aftvnews.com](https://go.aftvnews.com/) non va mai cambiato.
 
-**Pubblicare una nuova versione**: . GitHub Actions compila, firma e pubblica  nella Release.
-Segreti richiesti nel repository (*Settings → Secrets → Actions*):  (keystore in base64) e .
+**Pubblicare una nuova versione**: `git tag v1.0.1 && git push --tags`. GitHub Actions compila, firma e pubblica `orbita.apk` nella Release.
+Segreti richiesti nel repository (*Settings → Secrets and variables → Actions*): `ORBITA_KEYSTORE_BASE64` (keystore in base64) e `ORBITA_STORE_PASSWORD`.
 
-**Build locale**:  →  (serve Android SDK; la chiave di firma va in , esclusa da Git).
+**Build locale**: `npm run apk` → `android/app/build/outputs/apk/release/app-release.apk` (serve Android SDK; la chiave di firma va in `android/keystore.properties`, esclusa da Git).
+
+> ⚠ Conserva una copia di `android/orbita-release.jks` e della sua password: senza la stessa chiave gli aggiornamenti non si installano sopra la versione esistente.
 
 ## Funzioni
 
