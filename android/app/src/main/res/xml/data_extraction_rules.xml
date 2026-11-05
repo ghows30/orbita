@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Credenziali e librerie non devono finire in backup cloud o trasferimenti tra dispositivi -->
+<data-extraction-rules>
+    <cloud-backup><exclude domain="root" /><exclude domain="database" /><exclude domain="sharedpref" /><exclude domain="file" /></cloud-backup>
+    <device-transfer><exclude domain="root" /><exclude domain="database" /><exclude domain="sharedpref" /><exclude domain="file" /></device-transfer>
+</data-extraction-rules>

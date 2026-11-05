@@ -1,0 +1,280 @@
+// ORBITA – server locale: serve l'app e fa da proxy verso i provider IPTV.
+// Ascolta SOLO su 127.0.0.1. Le credenziali viaggiano nel corpo delle POST e vengono
+// sostituite da token opachi: non finiscono mai nella cronologia, nei log o negli URL del player.
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import { guardedGet, readBody, validateUrl, sanitizeUa, redact, ALLOW_PRIVATE } from './net-guard.mjs';
+import { parseXmltv } from './xmltv.mjs';
+
+const HOST = '127.0.0.1';
+const PORT = Number(process.env.PORT) || 7878;
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist');
+const DEV = process.env.ORBITA_DEV === '1' || process.argv.includes('--dev');
+
+const MAX_JSON_BODY = 64 * 1024;
+const MAX_TEXT = 250 * 1024 * 1024; // playlist enormi esistono davvero
+const MAX_HLS = 8 * 1024 * 1024;
+const MAX_LOGO = 3 * 1024 * 1024;
+const TOKEN_TTL = 12 * 3600 * 1000;
+const MAX_TOKENS = 200_000;
+
+/* ---------------- token opachi ---------------- */
+const tokens = new Map();
+function register(url, ua) {
+  const id = crypto.randomBytes(18).toString('base64url');
+  tokens.set(id, { url, ua, exp: Date.now() + TOKEN_TTL });
+  if (tokens.size > MAX_TOKENS) {
+    const drop = tokens.size - MAX_TOKENS;
+    let i = 0;
+    for (const k of tokens.keys()) {
+      if (i++ >= drop) break;
+      tokens.delete(k);
+    }
+  }
+  return id;
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of tokens) if (v.exp < now) tokens.delete(k);
+}, 10 * 60 * 1000).unref();
+
+/* ---------------- sicurezza richiesta ---------------- */
+const ALLOWED_HOSTS = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`, `[::1]:${PORT}`]);
+if (DEV) ['127.0.0.1:5173', 'localhost:5173'].forEach((h) => ALLOWED_HOSTS.add(h));
+
+function hostOk(req) {
+  // blocca DNS rebinding: il browser deve aver chiamato davvero localhost
+  return ALLOWED_HOSTS.has(String(req.headers.host || '').toLowerCase());
+}
+function notCrossSite(req) {
+  const s = req.headers['sec-fetch-site'];
+  return !s || s === 'same-origin' || s === 'none';
+}
+function originOk(req) {
+  const o = req.headers.origin;
+  if (!o) return true;
+  try {
+    return ALLOWED_HOSTS.has(new URL(o).host);
+  } catch {
+    return false;
+  }
+}
+
+const BASE_HEADERS = {
+  'x-content-type-options': 'nosniff',
+  'referrer-policy': 'no-referrer',
+  'x-frame-options': 'DENY',
+  'cross-origin-resource-policy': 'same-origin',
+  'cross-origin-opener-policy': 'same-origin',
+  'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+};
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self'",
+  "img-src 'self' data: blob:",
+  "media-src 'self' blob:",
+  "connect-src 'self'",
+  "worker-src 'self' blob:",
+  "font-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+
+function send(res, status, body, headers = {}) {
+  res.writeHead(status, { ...BASE_HEADERS, 'cache-control': 'no-store', ...headers });
+  res.end(body);
+}
+function json(res, status, obj) {
+  send(res, status, JSON.stringify(obj), { 'content-type': 'application/json; charset=utf-8' });
+}
+function fail(res, err) {
+  const code = err?.code;
+  const map = {
+    EBLOCKED: [403, 'Indirizzo non consentito per sicurezza.'],
+    ETOOBIG: [413, 'Risposta del provider troppo grande.'],
+    ETIMEDOUT: [504, 'Il provider non risponde (timeout).'],
+    ENOTFOUND: [502, 'Server del provider non trovato.'],
+    ECONNREFUSED: [502, 'Connessione rifiutata dal provider.'],
+    ECONNRESET: [502, 'Connessione interrotta dal provider.'],
+    EREDIRECT: [502, 'Troppi redirect dal provider.'],
+  };
+  const [st, msg] = map[code] || [502, 'Errore di rete verso il provider.'];
+  if (!res.headersSent) json(res, st, { error: msg });
+  else res.destroy();
+}
+
+async function readJson(req) {
+  const ct = String(req.headers['content-type'] || '');
+  if (!ct.startsWith('application/json')) throw Object.assign(new Error('bad ct'), { status: 415 });
+  const buf = await readBody(req, MAX_JSON_BODY);
+  return JSON.parse(buf.toString('utf8'));
+}
+
+/* ---------------- HLS: riscrittura playlist ---------------- */
+function isHls(ct, finalUrl) {
+  return /mpegurl/i.test(ct || '') || /\.m3u8(\?|$)/i.test(new URL(finalUrl).pathname + new URL(finalUrl).search);
+}
+function rewriteHls(text, baseUrl, ua) {
+  const tok = (ref) => {
+    const abs = validateUrl(new URL(ref, baseUrl).toString());
+    return abs ? `/p/${register(abs.toString(), ua)}` : ref;
+  };
+  return text
+    .split(/\r?\n/)
+    .map((line) => {
+      const l = line.trim();
+      if (!l) return line;
+      if (l.startsWith('#')) return line.replace(/URI="([^"]+)"/g, (_, u) => `URI="${tok(u)}"`);
+      return tok(l);
+    })
+    .join('\n');
+}
+
+/* ---------------- handler API ---------------- */
+async function apiOpen(req, res) {
+  const b = await readJson(req);
+  const u = validateUrl(b.url);
+  if (!u) return json(res, 400, { error: 'URL non valido.' });
+  json(res, 200, { path: `/p/${register(u.toString(), sanitizeUa(b.ua))}` });
+}
+
+async function apiFetch(req, res) {
+  const b = await readJson(req);
+  const { res: up } = await guardedGet(b.url, { ua: b.ua, timeoutMs: 45000 });
+  if (up.statusCode < 200 || up.statusCode >= 300) {
+    up.resume();
+    return json(res, 502, { error: `Il provider ha risposto con errore ${up.statusCode}.`, status: up.statusCode });
+  }
+  const body = await readBody(up, MAX_TEXT);
+  send(res, 200, body, { 'content-type': 'text/plain; charset=utf-8' });
+}
+
+async function apiEpg(req, res) {
+  const b = await readJson(req);
+  const ids = new Set((Array.isArray(b.ids) ? b.ids : []).slice(0, 20000).map((x) => String(x).toLowerCase()));
+  if (!ids.size) return json(res, 200, {});
+  const now = Date.now() / 1000;
+  const fromSec = Number(b.from) || now - 8 * 3600;
+  const toSec = Number(b.to) || now + 30 * 3600;
+  const { res: up } = await guardedGet(b.url, { ua: b.ua, timeoutMs: 60000 });
+  if (up.statusCode !== 200) {
+    up.resume();
+    return json(res, 502, { error: `Guida EPG non disponibile (${up.statusCode}).` });
+  }
+  json(res, 200, await parseXmltv(up, ids, { fromSec, toSec }));
+}
+
+async function proxyStream(req, res, id) {
+  const t = tokens.get(id);
+  if (!t) return json(res, 404, { error: 'Sessione stream scaduta.' });
+  t.exp = Date.now() + TOKEN_TTL;
+  const ac = new AbortController();
+  res.on('close', () => ac.abort());
+  const { res: up, finalUrl } = await guardedGet(t.url, { ua: t.ua, range: req.headers.range, timeoutMs: 20000, signal: ac.signal });
+  const ct = up.headers['content-type'] || 'application/octet-stream';
+  if (up.statusCode >= 400) {
+    up.resume();
+    return json(res, 502, { error: `Stream non disponibile (${up.statusCode}).`, status: up.statusCode });
+  }
+  if (isHls(ct, finalUrl)) {
+    const text = (await readBody(up, MAX_HLS)).toString('utf8');
+    if (text.trimStart().startsWith('#EXTM3U')) {
+      return send(res, 200, rewriteHls(text, finalUrl, t.ua), { 'content-type': 'application/vnd.apple.mpegurl' });
+    }
+    return send(res, 200, text, { 'content-type': ct });
+  }
+  const h = { ...BASE_HEADERS, 'content-type': ct, 'cache-control': 'no-store' };
+  for (const k of ['content-length', 'content-range', 'accept-ranges']) if (up.headers[k]) h[k] = up.headers[k];
+  res.writeHead(up.statusCode === 206 ? 206 : 200, h);
+  up.pipe(res);
+  up.on('error', () => res.destroy());
+}
+
+/* logo/poster: solo immagini, cache in memoria */
+const logoCache = new Map();
+async function proxyLogo(req, res, raw) {
+  const hit = logoCache.get(raw);
+  if (hit) return send(res, 200, hit.body, { 'content-type': hit.ct, 'cache-control': 'private, max-age=86400' });
+  const { res: up } = await guardedGet(raw, { timeoutMs: 12000 });
+  const ct = String(up.headers['content-type'] || '');
+  if (up.statusCode !== 200 || !/^image\/(png|jpe?g|gif|webp|avif|svg\+xml|x-icon|vnd\.microsoft\.icon)/i.test(ct)) {
+    up.resume();
+    return send(res, 404, '');
+  }
+  const body = await readBody(up, MAX_LOGO);
+  // gli SVG possono contenere script: li serviamo con CSP che li neutralizza
+  const extra = /svg/i.test(ct) ? { 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'" } : {};
+  if (logoCache.size > 3000) logoCache.delete(logoCache.keys().next().value);
+  logoCache.set(raw, { body, ct });
+  send(res, 200, body, { 'content-type': ct, 'cache-control': 'private, max-age=86400', ...extra });
+}
+
+/* ---------------- statici ---------------- */
+const MIME = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
+  '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json',
+  '.woff2': 'font/woff2', '.m3u': 'audio/x-mpegurl', '.webmanifest': 'application/manifest+json',
+};
+function serveStatic(req, res, pathname) {
+  let rel = decodeURIComponent(pathname);
+  if (rel.includes('\0')) return send(res, 400, '');
+  let file = path.resolve(ROOT, '.' + rel);
+  if (!file.startsWith(ROOT + path.sep) && file !== ROOT) return send(res, 403, '');
+  if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(ROOT, 'index.html');
+  if (!fs.existsSync(file)) return send(res, 503, 'Build mancante: esegui "npm run build".', { 'content-type': 'text/plain; charset=utf-8' });
+  const ext = path.extname(file);
+  const headers = { 'content-type': MIME[ext] || 'application/octet-stream' };
+  if (ext === '.html') headers['content-security-policy'] = CSP;
+  headers['cache-control'] = file.includes(`${path.sep}assets${path.sep}`) ? 'public, max-age=31536000, immutable' : 'no-cache';
+  res.writeHead(200, { ...BASE_HEADERS, ...headers });
+  fs.createReadStream(file).pipe(res);
+}
+
+/* ---------------- router ---------------- */
+const server = http.createServer(async (req, res) => {
+  try {
+    if (!hostOk(req)) return send(res, 421, 'Host non consentito');
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const p = url.pathname;
+
+    if (p.startsWith('/api/')) {
+      if (req.method !== 'POST') return json(res, 405, { error: 'Metodo non consentito' });
+      // header personalizzato = preflight CORS obbligatorio per altri siti, che noi non concediamo
+      if (req.headers['x-orbita'] !== '1' || !originOk(req) || !notCrossSite(req)) return json(res, 403, { error: 'Richiesta non autorizzata' });
+      if (p === '/api/open') return await apiOpen(req, res);
+      if (p === '/api/fetch') return await apiFetch(req, res);
+      if (p === '/api/epg') return await apiEpg(req, res);
+      return json(res, 404, { error: 'Not found' });
+    }
+    if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, '');
+    if (p.startsWith('/p/')) {
+      if (!notCrossSite(req)) return send(res, 403, '');
+      return await proxyStream(req, res, p.slice(3).split('/')[0]);
+    }
+    if (p === '/logo') {
+      if (!notCrossSite(req)) return send(res, 403, '');
+      const u = url.searchParams.get('u') || '';
+      if (!validateUrl(u)) return send(res, 400, '');
+      return await proxyLogo(req, res, u);
+    }
+    serveStatic(req, res, p);
+  } catch (err) {
+    if (err?.status) return json(res, err.status, { error: 'Richiesta non valida' });
+    if (err instanceof SyntaxError) return json(res, 400, { error: 'JSON non valido' });
+    if (err?.code !== 'ERR_STREAM_PREMATURE_CLOSE' && err?.name !== 'AbortError') {
+      console.warn(`[orbita] ${req.method} ${redact('http://x' + (req.url || '').split('?')[0])} → ${err?.code || err?.message}`);
+    }
+    fail(res, err);
+  }
+});
+
+server.listen(PORT, HOST, () => {
+  console.log(`\n  ORBITA pronto →  http://${HOST}:${PORT}\n`);
+  if (ALLOW_PRIVATE) console.log('  ⚠ ORBITA_ALLOW_PRIVATE=1: il proxy può raggiungere la rete locale.');
+});

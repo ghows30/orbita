@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- I provider IPTV usano quasi sempre http:// e i domini li sceglie l'utente: il traffico in chiaro
+     va quindi consentito. La WebView invece carica solo l'origine interna https://appassets.androidplatform.net
+     (vedi MainActivity) e non può navigare altrove. Solo certificati di sistema, mai quelli installati dall'utente. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

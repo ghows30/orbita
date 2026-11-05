@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Banner Android TV / Fire TV 320x180 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="320dp" android:height="180dp" android:viewportWidth="320" android:viewportHeight="180">
+    <path android:pathData="M0,0h320v180h-320z" android:fillColor="#0B0E17" />
+    <path android:pathData="M0,0h320v180h-320z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="radial" android:centerX="250" android:centerY="20" android:gradientRadius="220">
+                <item android:offset="0" android:color="#407C5CFF" />
+                <item android:offset="1" android:color="#000B0E17" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:pathData="M66,72a18,18 0,1 1,0 36a18,18 0,1 1,0 -36z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="48" android:startY="72" android:endX="84" android:endY="108">
+                <item android:offset="0" android:color="#7C5CFF" />
+                <item android:offset="1" android:color="#22D3EE" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <group android:rotation="-25" android:pivotX="66" android:pivotY="90">
+        <path android:pathData="M32,90a34,12 0,1 0,68 0a34,12 0,1 0,-68 0z" android:strokeWidth="3.5" android:fillColor="#00000000" android:strokeColor="#22D3EE" />
+    </group>
+    <!-- scritta ORBITA in tracciati semplici -->
+    <group android:translateX="118" android:translateY="74">
+        <path android:pathData="M14,0a14,16 0,1 0,0.01 0zM14,6a8,10 0,1 1,-0.01 0z" android:fillColor="#EEF1F8" />
+        <path android:pathData="M34,0h12a9,9 0,0 1,2 17.8l8,14.2h-7l-7,-13h-2v13h-6zM40,6v8h6a4,4 0,0 0,0 -8z" android:fillColor="#EEF1F8" />
+        <path android:pathData="M62,0h12a8,8 0,0 1,5 14a9,9 0,0 1,-4 18h-13zM68,6v7h5a3.5,3.5 0,0 0,0 -7zM68,19v7h6a3.5,3.5 0,0 0,0 -7z" android:fillColor="#EEF1F8" />
+        <path android:pathData="M86,0h6v32h-6z" android:fillColor="#EEF1F8" />
+        <path android:pathData="M98,0h22v6h-8v26h-6v-26h-8z" android:fillColor="#EEF1F8" />
+        <path android:pathData="M132,0h7l11,32h-6.5l-2.2,-7h-11.6l-2.2,7h-6.5zM135.5,8l-4,12h8z" android:fillColor="#EEF1F8" />
+    </group>
+</vector>

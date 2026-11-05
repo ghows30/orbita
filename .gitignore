@@ -1,0 +1,8 @@
+node_modules
+dist
+out
+*.log
+*.jks
+*.keystore
+keystore.properties
+keystore.base64.txt
