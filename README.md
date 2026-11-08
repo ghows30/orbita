@@ -20,7 +20,7 @@ App nativa in `android/`: la stessa interfaccia in una WebView chiusa e la ripro
 
 **Installazione su Firestick con Downloader**
 1. Sulla Fire TV: *Impostazioni → La mia Fire TV → Opzioni sviluppatore → Installa app sconosciute* → attiva **Downloader**.
-2. Apri Downloader e digita il codice ORBITA (oppure l'URL `https://github.com/<utente>/<repo>/releases/latest/download/orbita.apk`).
+2. Apri Downloader e digita il codice **6527602** (oppure l'URL `https://github.com/ghows30/orbita/releases/latest/download/orbita.apk`).
 3. Installa e apri ORBITA.
 
 L'URL `releases/latest/download/orbita.apk` punta sempre all'ultima versione: il codice Downloader creato su [go.aftvnews.com](https://go.aftvnews.com/) non va mai cambiato.
