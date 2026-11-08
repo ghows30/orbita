@@ -62,6 +62,15 @@ object Net {
         .retryOnConnectionFailure(true)
         .build()
 
+    /**
+     * Per il player: una connessione che resta muta per 12 s si considera persa e si riapre subito,
+     * invece di aspettare i 30 s del client normale con l'immagine ferma.
+     */
+    val streamClient: OkHttpClient = client.newBuilder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(12, TimeUnit.SECONDS)
+        .build()
+
     fun cleanUa(ua: String?): String {
         val t = ua?.replace(Regex("[\\r\\n\\u0000]"), "")?.trim()?.take(200)
         return if (t.isNullOrEmpty()) DEFAULT_UA else t

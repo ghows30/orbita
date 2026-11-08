@@ -6,6 +6,10 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -34,6 +38,7 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import org.json.JSONArray
@@ -53,6 +58,7 @@ class PlayerActivity : Activity() {
         @Volatile var request: String? = null
         const val EXTRA_RESULT = "result"
         private const val MAX_RETRY = 6
+        private const val MAX_RETRY_LIVE = 20
     }
 
     private class Item(val id: String, val title: String, val subtitle: String, val url: String, val alt: String?)
@@ -76,6 +82,8 @@ class PlayerActivity : Activity() {
     private var retries = 0
     private var usingAlt = false
     private var ended = false
+    private var retryPending: Runnable? = null
+    private var netCallback: ConnectivityManager.NetworkCallback? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,7 +95,25 @@ class PlayerActivity : Activity() {
         buildUi()
         buildPlayer()
         BackKey.register(this, ::onBack)
+        watchNetwork()
         load(resume = true)
+    }
+
+    /** Quando la rete torna disponibile non aspetta il prossimo tentativo programmato: riprova subito. */
+    private fun watchNetwork() {
+        val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
+        val cb = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                ui.post {
+                    val r = retryPending ?: return@post
+                    ui.removeCallbacks(r)
+                    status("Rete tornata, riprendo…")
+                    r.run()
+                }
+            }
+        }
+        val req = NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build()
+        if (runCatching { cm.registerNetworkCallback(req, cb) }.isSuccess) netCallback = cb
     }
 
     private fun parse(r: JSONObject) {
@@ -157,18 +183,26 @@ class PlayerActivity : Activity() {
     }
 
     private fun buildPlayer() {
-        val http = OkHttpDataSource.Factory(Net.client).setUserAgent(Net.cleanUa(ua))
+        val http = OkHttpDataSource.Factory(Net.streamClient).setUserAgent(Net.cleanUa(ua))
         val renderers = DefaultRenderersFactory(this)
             .setEnableDecoderFallback(true)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+        // partenza rapida (2,5 s), ma dopo un'interruzione riparte solo con 8 s di scorta:
+        // con un Wi-Fi ballerino evita il ciclo "riparte, si blocca, riparte"
         val load = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(15_000, 60_000, 2_000, 4_000)
+            .setBufferDurationsMs(20_000, 60_000, 2_500, 8_000)
             .build()
+        // un segmento HLS perso si riprova più volte prima di far fallire la riproduzione
+        val sources = DefaultMediaSourceFactory(this)
+            .setDataSourceFactory(http)
+            .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(8))
         player = ExoPlayer.Builder(this, renderers)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(this).setDataSourceFactory(http))
+            .setMediaSourceFactory(sources)
             .setLoadControl(load)
             .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
             .setHandleAudioBecomingNoisy(true)
+            // tiene il Wi-Fi in modalità alte prestazioni durante la riproduzione (niente risparmio energetico)
+            .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
@@ -197,7 +231,8 @@ class PlayerActivity : Activity() {
         val url = if (usingAlt && it.alt != null) it.alt else it.url
         val b = MediaItem.Builder().setUri(url)
         if (url.contains(".m3u8", true)) b.setMimeType(MimeTypes.APPLICATION_M3U8)
-        if (live) b.setLiveConfiguration(MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(6_000).build())
+        // 15 s dal punto live: qualche secondo di ritardo in cambio di una scorta che assorbe i cali di rete
+        if (live) b.setLiveConfiguration(MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(15_000).build())
         player.setMediaItem(b.build(), if (resume && startAt > 0 && !live) startAt else C.TIME_UNSET)
         player.prepare()
         player.playWhenReady = true
@@ -228,13 +263,16 @@ class PlayerActivity : Activity() {
             spinner.visibility = View.GONE
             return
         }
-        if (retries < MAX_RETRY) {
-            val wait = minOf(1000L shl retries, 15_000L)
+        // in diretta si insiste di più (un calo di Wi-Fi può durare un minuto), con attese più brevi
+        val max = if (live) MAX_RETRY_LIVE else MAX_RETRY
+        if (retries < max) {
+            val wait = minOf(1000L shl retries, if (live) 8_000L else 15_000L)
             retries++
             if (!live) startAt = player.currentPosition
-            status("Connessione interrotta. Nuovo tentativo tra ${wait / 1000}s ($retries/$MAX_RETRY)")
+            status("Connessione interrotta. Nuovo tentativo tra ${wait / 1000}s ($retries/$max)")
             val idx = index
-            ui.postDelayed({ if (idx == index && !isFinishing) load(resume = !live) }, wait)
+            retryPending = Runnable { retryPending = null; if (idx == index && !isFinishing) load(resume = !live) }
+            ui.postDelayed(retryPending!!, wait)
         } else {
             status("Impossibile riprodurre questo contenuto (${e.errorCodeName}).")
         }
@@ -252,6 +290,7 @@ class PlayerActivity : Activity() {
         usingAlt = false
         status(null)
         ui.removeCallbacksAndMessages(null)
+        retryPending = null
         tickClock()
         load(resume = false)
     }
@@ -309,6 +348,7 @@ class PlayerActivity : Activity() {
     }
 
     override fun onDestroy() {
+        netCallback?.let { cb -> runCatching { (getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager).unregisterNetworkCallback(cb) } }
         ui.removeCallbacksAndMessages(null)
         if (::player.isInitialized) player.release()
         super.onDestroy()

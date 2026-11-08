@@ -3,6 +3,8 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- il player tiene il Wi-Fi in alte prestazioni durante la visione (C.WAKE_MODE_NETWORK) -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- TV: niente touchscreen obbligatorio, leanback facoltativo così l'app gira anche su telefoni/tablet -->
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
