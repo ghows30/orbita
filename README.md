@@ -23,6 +23,8 @@ App nativa in `android/`: la stessa interfaccia in una WebView chiusa e la ripro
 2. Apri Downloader e digita il codice **6527602** (oppure l'URL `https://github.com/ghows30/orbita/releases/latest/download/orbita.apk`).
 3. Installa e apri ORBITA.
 
+**Aggiungere una playlist dallo smartphone**: sulla TV premi *Aggiungi dallo smartphone (QR)*, inquadra il QR (o apri l'indirizzo `http://<ip-tv>:8765` e digita il codice di 6 cifre) e compila i dati dal telefono. Il server nella TV è acceso solo finché il QR è aperto (max 15 minuti), risponde solo alla rete di casa e si blocca dopo 5 codici errati. I dati viaggiano in HTTP nella rete locale, quindi usalo solo su una rete Wi-Fi di cui ti fidi.
+
 L'URL `releases/latest/download/orbita.apk` punta sempre all'ultima versione: il codice Downloader creato su [go.aftvnews.com](https://go.aftvnews.com/) non va mai cambiato.
 
 **Pubblicare una nuova versione**: `git tag v1.0.1 && git push --tags`. GitHub Actions compila, firma e pubblica `orbita.apk` nella Release.

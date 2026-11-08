@@ -71,6 +71,7 @@ const P: Record<string, string> = {
   down: 'M6 9l6 6 6-6',
   upload: 'M12 16V4M7 9l5-5 5 5M4 20h16',
   info: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM12 11v6M12 7.5h.01',
+  phone: 'M8 2h8a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM11 18h2',
 };
 
 export function icon(name: keyof typeof P | string, size = 20, cls = ''): SVGSVGElement {
@@ -131,6 +132,8 @@ export function modal(content: HTMLElement, opts: { wide?: boolean; onClose?: ()
     prev?.focus?.();
   };
   const onKey = (e: KeyboardEvent) => {
+    const open = document.querySelectorAll('.modal-wrap:not(.out)');
+    if (open[open.length - 1] !== wrap) return; // con modali sovrapposte chiude solo quella in cima
     if (e.key === 'Escape' || e.key === 'Backspace' && !(e.target instanceof HTMLInputElement)) {
       e.stopPropagation();
       e.preventDefault();

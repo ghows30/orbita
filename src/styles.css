@@ -318,6 +318,15 @@ body.onboarding .sidebar { display: none; }
 .adv .field { margin-bottom: 12px; }
 .form-progress { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 14px; }
 .modal .source-form { padding-top: 4px; }
+.phone-btn { align-self: stretch; justify-content: center; }
+.phone-add { display: flex; flex-direction: column; gap: 18px; }
+.phone-add h2 { font-size: 22px; padding-right: 40px; }
+.phone-add-body { display: grid; grid-template-columns: 200px 1fr; gap: 20px; align-items: center; }
+.phone-add .qr { width: 200px; height: 200px; border-radius: 12px; background: #fff; image-rendering: pixelated; }
+.phone-add .steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: var(--muted); }
+.phone-add .steps b { color: var(--text); word-break: break-all; }
+.phone-add .pin { font-size: 18px; letter-spacing: 0.15em; font-variant-numeric: tabular-nums; }
+@media (max-width: 520px) { .phone-add-body { grid-template-columns: 1fr; justify-items: center; } }
 
 /* ---------------- impostazioni ---------------- */
 .settings { max-width: 900px; }

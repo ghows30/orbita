@@ -14,12 +14,17 @@ export interface NativeBridge {
   isTv(): boolean;
   version(): string;
   exit(): void;
+  /** server per "Aggiungi dallo smartphone": JSON {url, code, qr} oppure "" */
+  remoteStart?(): string;
+  remoteStop?(): void;
+  remoteResult?(ok: boolean, msg: string): void;
 }
 declare global {
   interface Window {
     OrbitaAndroid?: NativeBridge;
     orbitaBack?: () => boolean;
     orbitaPlayerClosed?: (json: string) => void;
+    orbitaRemoteSource?: (json: string) => void;
   }
 }
 export const native: NativeBridge | undefined = typeof window !== 'undefined' ? window.OrbitaAndroid : undefined;

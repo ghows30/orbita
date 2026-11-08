@@ -36,6 +36,9 @@ import java.util.concurrent.ConcurrentHashMap
 class MainActivity : Activity() {
     private lateinit var web: WebView
     private val bridge = Bridge()
+    private val remote = Remote(this) { json ->
+        runOnUiThread { web.evaluateJavascript("window.orbitaRemoteSource && window.orbitaRemoteSource(${JSONObject.quote(json)})", null) }
+    }
     private var lastBack = 0L
     private val logoCache = object : LruCache<String, Pair<String, ByteArray>>(24 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Pair<String, ByteArray>) = value.second.size
@@ -101,6 +104,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        remote.stop()
         web.destroy()
         super.onDestroy()
     }
@@ -176,6 +180,16 @@ class MainActivity : Activity() {
 
         @JavascriptInterface
         fun exit() = runOnUiThread { finish() }
+
+        /** Accende il server per lo smartphone: {url, code, qr} oppure "" se la TV non è in una rete locale. */
+        @JavascriptInterface
+        fun remoteStart(): String = remote.start()?.toString() ?: ""
+
+        @JavascriptInterface
+        fun remoteStop() = remote.stop()
+
+        @JavascriptInterface
+        fun remoteResult(ok: Boolean, msg: String) = remote.result(ok, msg)
     }
 
     /* ---------------- origine interna ---------------- */
