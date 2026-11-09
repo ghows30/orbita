@@ -482,7 +482,7 @@ export const locale = () => LANGS.find((l) => l.id === lang)!.locale;
 
 export function setLang(l: Lang) {
   lang = l;
-  document.documentElement.lang = l;
+  if (typeof document !== 'undefined') document.documentElement.lang = l;
   try {
     localStorage.setItem(KEY, l);
   } catch {

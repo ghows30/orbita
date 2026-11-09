@@ -13,5 +13,5 @@ export default defineConfig({
   },
   // chrome69: WebView delle Fire TV più vecchie (Fire OS 6); esbuild riscrive la sintassi moderna
   build: { target: ['es2019', 'chrome69'], sourcemap: false, chunkSizeWarningLimit: 900 },
-  test: { environment: 'node' },
+  test: { environment: 'node', setupFiles: ['tests/setup.ts'] },
 } as never);
