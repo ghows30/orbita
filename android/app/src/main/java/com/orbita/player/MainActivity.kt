@@ -185,6 +185,10 @@ class MainActivity : Activity() {
         @JavascriptInterface
         fun remoteStart(): String = remote.start()?.toString() ?: ""
 
+        /** Come remoteStart, ma il telefono invia le chiavi API (Impostazioni → Voti e copertine). */
+        @JavascriptInterface
+        fun remoteStartKeys(): String = remote.start("keys")?.toString() ?: ""
+
         @JavascriptInterface
         fun remoteStop() = remote.stop()
 

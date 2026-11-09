@@ -2,10 +2,37 @@ import { native } from '../core/api';
 import { kv } from '../core/store';
 import { active, clearHistory, emit, refreshActive, removeSource, saveSettings, setPin, state, switchSource, unlock } from '../state';
 import { askConfirm, askPin, h, icon, modal, toast } from './dom';
-import { sourceForm } from './onboard';
+import { phoneLink, sourceForm } from './onboard';
 import { currentTheme, setTheme, THEMES } from './theme';
 import { currentLang, LANGS, locale, num, setLang, t } from '../i18n';
 import { metaKeys, saveMetaKeys, setMetaLang, testMetaKeys } from '../core/meta';
+
+/** Chiavi dallo smartphone: un campo vuoto mantiene la chiave già salvata; si provano prima di salvarle. */
+function keysFromPhone(rerender: () => void) {
+  phoneLink({
+    title: t('set.metaPhoneTitle'),
+    start: () => native!.remoteStartKeys!(),
+    lastStep: t('set.metaPhoneStep'),
+    onDone: rerender,
+    handle: async (json) => {
+      let k: { tmdb?: unknown; omdb?: unknown } = {};
+      try {
+        k = JSON.parse(json) ?? {};
+      } catch {
+        /* sotto: nessuna chiave */
+      }
+      const str = (v: unknown) => (typeof v === 'string' ? v.trim().slice(0, 200) : '');
+      const cur = metaKeys();
+      const next = { tmdb: str(k.tmdb) || cur.tmdb || '', omdb: str(k.omdb) || cur.omdb || '' };
+      if (!str(k.tmdb) && !str(k.omdb)) throw new Error(t('set.metaNone'));
+      const ok = await testMetaKeys({ tmdb: str(k.tmdb) || undefined, omdb: str(k.omdb) || undefined });
+      const bad = (['tmdb', 'omdb'] as const).filter((s) => ok[s] === false);
+      if (bad.length) throw new Error(t('set.metaBad', { s: bad.map((s) => s.toUpperCase()).join(', ') }));
+      await saveMetaKeys(next);
+      return t('set.metaSaved');
+    },
+  });
+}
 
 /** Chiavi TMDB / OMDb: facoltative, cifrate sul dispositivo, provate prima di salvarle. */
 function metaSection(rerender: () => void): HTMLElement {
@@ -15,11 +42,15 @@ function metaSection(rerender: () => void): HTMLElement {
   const tmdb = inp(k.tmdb, 'TMDB');
   const omdb = inp(k.omdb, 'OMDb');
   const save = h('button', { class: 'btn primary', type: 'submit' }, icon('check', 18), t('set.metaSave'));
+  // su TV incollare chiavi lunghe col telecomando è impossibile: si inviano dallo smartphone
+  const phone = native?.remoteStartKeys && native.isTv()
+    ? h('button', { type: 'button', class: 'btn ghost', on: { click: () => keysFromPhone(rerender) } }, icon('phone', 18), t('set.metaPhone'))
+    : null;
   const form = h('form', { class: 'stack meta-form' },
     h('p', { class: 'muted' }, t('set.metaDesc')),
     h('label', { class: 'field' }, h('span', null, t('set.tmdbKey')), tmdb, h('small', null, t('set.tmdbHint'))),
     h('label', { class: 'field' }, h('span', null, t('set.omdbKey')), omdb, h('small', null, t('set.omdbHint'))),
-    h('div', { class: 'row gap' }, save),
+    h('div', { class: 'row gap wrap' }, phone, save),
     h('p', { class: 'fine' }, t('set.metaPrivacy')),
     h('p', { class: 'fine' }, t('set.tmdbNotice')));
   form.addEventListener('submit', async (e) => {

@@ -55,12 +55,20 @@ async function importSource(src: Source, step: (m: string) => void, text?: strin
   return t('src.loaded', { l: lib.live.length, m: lib.movies.length, s: lib.series.length });
 }
 
-/** TV: QR + indirizzo locale; la playlist si compila dallo smartphone e arriva qui tramite il server nativo. */
-function addFromPhone(onDone: () => void) {
-  if (!native?.remoteStart) return;
+/**
+ * TV: finestra con QR e indirizzo locale; lo smartphone compila un modulo e i dati arrivano qui dal server nativo.
+ * `handle` riceve il JSON (non fidato) e restituisce il messaggio di esito, oppure lancia un errore da mostrare.
+ */
+export function phoneLink(opts: {
+  title: string;
+  start: () => string;
+  lastStep: string;
+  handle: (json: string, step: (m: string) => void) => Promise<string>;
+  onDone: () => void;
+}) {
   let info: { url: string; code: string; qr: string } | null = null;
   try {
-    info = JSON.parse(native.remoteStart() || 'null');
+    info = JSON.parse(opts.start() || 'null');
   } catch {
     /* risposta non valida */
   }
@@ -70,14 +78,14 @@ function addFromPhone(onDone: () => void) {
   step(t('phone.waiting'));
   let busy = false;
   const close = modal(h('div', { class: 'phone-add' },
-    h('h2', null, t('phone.title')),
+    h('h2', null, opts.title),
     h('div', { class: 'phone-add-body' },
       h('img', { class: 'qr', src: info.qr, alt: t('phone.qrAlt') }),
       h('ol', { class: 'steps' },
         h('li', null, t('phone.step1')),
         h('li', null, t('phone.step2'), h('b', null, info.url)),
         h('li', null, t('phone.step3'), h('b', { class: 'pin' }, info.code)),
-        h('li', null, t('phone.step4')))),
+        h('li', null, opts.lastStep))),
     status), {
     onClose: () => {
       window.orbitaRemoteSource = undefined;
@@ -86,25 +94,14 @@ function addFromPhone(onDone: () => void) {
   });
   window.orbitaRemoteSource = async (json) => {
     if (busy) return;
-    let f: Fields = {};
-    try {
-      f = JSON.parse(json) ?? {};
-    } catch {
-      /* gestito da buildSource */
-    }
-    const src = buildSource(f, uid());
-    if (typeof src === 'string') {
-      native!.remoteResult?.(false, src);
-      return step(t('phone.fix', { m: src }), false);
-    }
     busy = true;
     step(t('phone.received'));
     try {
-      const msg = await importSource(src, step);
+      const msg = await opts.handle(json, step);
       native!.remoteResult?.(true, msg);
       toast(msg, 'ok');
       step(`✓ ${msg}`, false);
-      setTimeout(() => (close(), onDone()), 2500);
+      setTimeout(() => (close(), opts.onDone()), 2500);
     } catch (err) {
       const m = (err as Error).message || t('phone.failed');
       native!.remoteResult?.(false, m);
@@ -113,6 +110,28 @@ function addFromPhone(onDone: () => void) {
       busy = false;
     }
   };
+}
+
+/** Playlist dallo smartphone: stessa validazione del form della TV. */
+function addFromPhone(onDone: () => void) {
+  if (!native?.remoteStart) return;
+  phoneLink({
+    title: t('phone.title'),
+    start: () => native!.remoteStart!(),
+    lastStep: t('phone.step4'),
+    onDone,
+    handle: async (json, step) => {
+      let f: Fields = {};
+      try {
+        f = JSON.parse(json) ?? {};
+      } catch {
+        /* gestito da buildSource */
+      }
+      const src = buildSource(f, uid());
+      if (typeof src === 'string') throw new Error(src);
+      return importSource(src, step);
+    },
+  });
 }
 
 /** Form per aggiungere (o modificare) una sorgente. Valida tutto lato client prima di contattare il server. */

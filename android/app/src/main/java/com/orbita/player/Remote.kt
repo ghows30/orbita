@@ -25,6 +25,7 @@ import java.security.SecureRandom
  * - accetta un solo invio riuscito, poi resta acceso solo per comunicare l'esito al telefono;
  * - si spegne da solo dopo [TTL_MS].
  * Il JSON ricevuto passa a JavaScript ([onSource]), che lo valida come il form della TV.
+ * Modalità: "source" (playlist) oppure "keys" (chiavi API TMDB/OMDb dalle Impostazioni).
  */
 class Remote(private val ctx: Context, private val onSource: (String) -> Unit) {
     @Volatile private var server: ServerSocket? = null
@@ -33,11 +34,13 @@ class Remote(private val ctx: Context, private val onSource: (String) -> Unit) {
     @Volatile private var message = ""
     @Volatile private var failures = 0
     @Volatile private var startedAt = 0L
+    @Volatile private var mode = "source"
 
     /** Avvia (o riavvia) la sessione; restituisce {url, code, qr} oppure null se la TV non è in rete locale. */
     @Synchronized
-    fun start(): JSONObject? {
+    fun start(mode: String = "source"): JSONObject? {
         stop()
+        this.mode = if (mode == "keys") "keys" else "source"
         val ip = lanAddress() ?: return null
         val ss = PORTS.firstNotNullOfOrNull { p -> runCatching { ServerSocket(p, 8) }.getOrNull() } ?: return null
         code = (100000 + rnd.nextInt(900000)).toString()
@@ -116,7 +119,8 @@ class Remote(private val ctx: Context, private val onSource: (String) -> Unit) {
                     return send(out, 403, "application/json", err(L10n.t("wrongCode")))
                 }
                 if (state == "loading" || state == "ok") return send(out, 409, "application/json", err(L10n.t("already")))
-                val src = body.optJSONObject("source") ?: return send(out, 400, "application/json", err(L10n.t("missing")))
+                val key = if (mode == "keys") "keys" else "source"
+                val src = body.optJSONObject(key) ?: return send(out, 400, "application/json", err(L10n.t("missing")))
                 state = "loading"
                 message = ""
                 onSource(src.toString())
@@ -127,7 +131,7 @@ class Remote(private val ctx: Context, private val onSource: (String) -> Unit) {
     }
 
     private fun page(): String = ctx.assets.open("remote.html").use { String(it.readBytes(), Charsets.UTF_8) }
-        .replaceFirst("<html lang=\"it\">", "<html lang=\"${L10n.lang}\">")
+        .replaceFirst("<html lang=\"it\">", "<html lang=\"${L10n.lang}\" data-mode=\"$mode\">")
 
     private fun err(m: String) = JSONObject().put("error", m).toString()
 

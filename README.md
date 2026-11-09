@@ -97,6 +97,12 @@ ORBITA can show **IMDb**, **Rotten Tomatoes** and **TMDB** ratings, plus backdro
 
 Paste the keys in **Settings → Ratings and artwork** and press **Check and save**: ORBITA tests them before saving and stores them encrypted on the device.
 
+**On a TV**, typing a 32-character key with the remote is painful: press **Enter from your phone (QR)** in the same section, scan the code and paste the keys on your phone. It works like adding a playlist from the phone: same network, same 6-digit code. The TV checks the keys and tells the phone whether they were saved; a field left empty keeps the key already on the TV.
+
+| On the TV | On the phone |
+|---|---|
+| ![QR code for the API keys on the TV](docs/screenshots/keys-qr.png) | <img src="docs/screenshots/phone-keys.png" alt="API keys page on the phone" width="260"> |
+
 Without keys, ORBITA still uses what an **Xtream** provider supplies (rating, plot, backdrop). Results are cached on the device for three weeks, cards are only looked up when they appear on screen, and OMDb (which has a low daily limit) is only queried for the showcase and for detail pages.
 
 | Settings | Movie detail |
@@ -255,7 +261,7 @@ The bridge exposes only a few methods (`MainActivity.Bridge`), declared in `Nati
 | `prepare(path, body)` | Registers an API request; JS then runs it with `fetch('/__native/<id>')` |
 | `play(json)` | Opens the ExoPlayer player |
 | `isTv()`, `version()`, `exit()` | Device info and exit |
-| `remoteStart()`, `remoteStop()`, `remoteResult(ok, msg)` | Server for the phone |
+| `remoteStart()`, `remoteStartKeys()`, `remoteStop()`, `remoteResult(ok, msg)` | Server for the phone (playlist or API keys) |
 | `setLang(lang)` | Language for native text and the phone page |
 
 Native code calls back into JavaScript with `window.orbitaBack()` (Back key), `window.orbitaPlayerClosed(json)` and `window.orbitaRemoteSource(json)` (playlist received from the phone). Data from the phone goes through the same validation as the form (`buildSource` in [src/ui/onboard.ts](src/ui/onboard.ts)).
@@ -307,7 +313,7 @@ Secrets required in the repository (*Settings → Secrets and variables → Acti
 | SSRF | Only http/https; the IP is checked **after** DNS resolution and on every redirect. Loopback, link-local and cloud metadata are blocked; private networks are blocked in the browser (unlock with `ORBITA_ALLOW_PRIVATE=1`) and allowed on the TV. |
 | XSS from malicious playlists | DOM built only with `textContent`, no `innerHTML`; strict CSP; `javascript:` URLs discarded. |
 | Android WebView | Loads only the internal asset origin; any other navigation is blocked and the bridge is never exposed to external pages. |
-| Phone server | On only while the QR is open (15 min max), local-network clients only, 6-digit code locking after 5 errors, 32 KB max body, one playlist per session. |
+| Phone server | On only while the QR is open (15 min max), local-network clients only, 6-digit code locking after 5 errors, 32 KB max body, one submission per session. |
 | Huge responses | Size limits and timeouts on playlists, HLS, EPG (gzip included) and images. |
 | Ratings services | Optional. TMDB/OMDb keys stored encrypted; requests go through the same proxy or native path as playlists, with results cached locally. |
 | Parental control | PIN hashed with PBKDF2-SHA256 (210,000 iterations), constant-time comparison. |

@@ -21,6 +21,8 @@ export interface NativeBridge {
   remoteResult?(ok: boolean, msg: string): void;
   /** Lingua scelta nell'interfaccia (messaggi nativi e pagina per lo smartphone). Facoltativo: APK vecchi non lo hanno. */
   setLang?(lang: string): void;
+  /** Come remoteStart, ma lo smartphone invia le chiavi API TMDB/OMDb. Facoltativo: APK fino alla 1.2.0 non lo hanno. */
+  remoteStartKeys?(): string;
 }
 declare global {
   interface Window {

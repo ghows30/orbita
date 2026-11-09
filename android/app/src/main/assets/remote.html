@@ -20,7 +20,7 @@
   label { display: block; margin-top: 14px; font-weight: 600; font-size: .92rem; }
   input, select { width: 100%; margin-top: 6px; padding: 12px; font: inherit; font-size: 16px; color: var(--text); background: var(--bg-2); border: 1px solid var(--line); border-radius: 8px; }
   input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-  #code { font-size: 1.4rem; letter-spacing: .3em; text-align: center; font-variant-numeric: tabular-nums; }
+  #code, #kcode { font-size: 1.4rem; letter-spacing: .3em; text-align: center; font-variant-numeric: tabular-nums; }
   details { margin-top: 16px; color: var(--muted); }
   summary { cursor: pointer; }
   button.go { width: 100%; margin-top: 24px; padding: 14px; border: 0; border-radius: 8px; font: inherit; font-weight: 750; color: var(--on-accent); background: var(--accent); }
@@ -72,6 +72,18 @@
     <button class="go" type="submit" data-i18n="send">Invia alla TV</button>
   </form>
 
+  <form id="k" autocomplete="off" novalidate hidden>
+    <label><span data-i18n="code">Codice mostrato sulla TV</span>
+      <input id="kcode" inputmode="numeric" maxlength="6" pattern="\d{6}" placeholder="000000" required>
+    </label>
+    <label><span data-i18n="kTmdb">Chiave API TMDB (v3)</span> <input id="ktmdb" autocapitalize="off" spellcheck="false">
+      <small data-i18n="kTmdbHint">Gratuita su themoviedb.org → Impostazioni → API.</small></label>
+    <label><span data-i18n="kOmdb">Chiave API OMDb</span> <input id="komdb" autocapitalize="off" spellcheck="false">
+      <small data-i18n="kOmdbHint">Gratuita su omdbapi.com: voti IMDb e Rotten Tomatoes.</small></label>
+    <p class="muted" data-i18n="kKeep">Lascia vuoto un campo per non cambiare la chiave già salvata.</p>
+    <button class="go" type="submit" data-i18n="kSend">Invia alla TV</button>
+  </form>
+
   <div id="status" class="status" hidden></div>
   <p class="fine" data-i18n="fine">I dati passano solo nella rete di casa, direttamente alla TV. ORBITA non fornisce contenuti.</p>
 </main>
@@ -112,15 +124,42 @@
       needHost: 'Gib die Serveradresse ein.', badUrl: 'Gib eine gültige http(s)-URL ein.', sending: 'Wird an den TV gesendet…', sendFail: 'Senden fehlgeschlagen.',
       sent: 'Gesendet! Der TV lädt die Playlist…', unreachable: 'TV nicht erreichbar. Prüfe, ob der QR-Code noch auf dem TV offen ist und du im selben WLAN bist.' }
   };
+  // modalità "keys": la TV chiede le chiavi API dalle Impostazioni (<html data-mode="keys">)
+  var K = {
+    it: { kPageTitle: 'ORBITA · Chiavi API', kTitle: 'Chiavi API per', kLead: 'Voti IMDb, Rotten Tomatoes e TMDB, sfondi e trame: incolla qui le chiavi gratuite.',
+      kTmdb: 'Chiave API TMDB (v3)', kTmdbHint: 'Gratuita su themoviedb.org → Impostazioni → API.', kOmdb: 'Chiave API OMDb',
+      kOmdbHint: 'Gratuita su omdbapi.com: voti IMDb e Rotten Tomatoes.', kKeep: 'Lascia vuoto un campo per non cambiare la chiave già salvata.',
+      kSend: 'Invia alla TV', kNeedOne: 'Inserisci almeno una chiave.', kSent: 'Inviate! La TV sta verificando le chiavi…', kAdded: 'Chiavi salvate sulla TV.' },
+    en: { kPageTitle: 'ORBITA · API keys', kTitle: 'API keys for', kLead: 'IMDb, Rotten Tomatoes and TMDB ratings, backdrops and plots: paste your free keys here.',
+      kTmdb: 'TMDB API key (v3)', kTmdbHint: 'Free at themoviedb.org → Settings → API.', kOmdb: 'OMDb API key',
+      kOmdbHint: 'Free at omdbapi.com: IMDb and Rotten Tomatoes ratings.', kKeep: 'Leave a field empty to keep the key already saved.',
+      kSend: 'Send to TV', kNeedOne: 'Enter at least one key.', kSent: 'Sent! The TV is checking the keys…', kAdded: 'Keys saved on the TV.' },
+    es: { kPageTitle: 'ORBITA · Claves API', kTitle: 'Claves API para', kLead: 'Valoraciones de IMDb, Rotten Tomatoes y TMDB, fondos y sinopsis: pega aquí tus claves gratuitas.',
+      kTmdb: 'Clave API de TMDB (v3)', kTmdbHint: 'Gratis en themoviedb.org → Ajustes → API.', kOmdb: 'Clave API de OMDb',
+      kOmdbHint: 'Gratis en omdbapi.com: valoraciones de IMDb y Rotten Tomatoes.', kKeep: 'Deja un campo vacío para mantener la clave ya guardada.',
+      kSend: 'Enviar a la TV', kNeedOne: 'Introduce al menos una clave.', kSent: '¡Enviadas! La TV está comprobando las claves…', kAdded: 'Claves guardadas en la TV.' },
+    de: { kPageTitle: 'ORBITA · API-Schlüssel', kTitle: 'API-Schlüssel für', kLead: 'Bewertungen von IMDb, Rotten Tomatoes und TMDB, Hintergründe und Handlungen: füge hier deine kostenlosen Schlüssel ein.',
+      kTmdb: 'TMDB-API-Schlüssel (v3)', kTmdbHint: 'Kostenlos auf themoviedb.org → Einstellungen → API.', kOmdb: 'OMDb-API-Schlüssel',
+      kOmdbHint: 'Kostenlos auf omdbapi.com: IMDb- und Rotten-Tomatoes-Bewertungen.', kKeep: 'Lass ein Feld leer, um den gespeicherten Schlüssel zu behalten.',
+      kSend: 'An TV senden', kNeedOne: 'Gib mindestens einen Schlüssel ein.', kSent: 'Gesendet! Der TV prüft die Schlüssel…', kAdded: 'Schlüssel auf dem TV gespeichert.' }
+  };
   var T = L[document.documentElement.lang] || L.en;
-  document.title = T.pageTitle;
+  var TK = K[document.documentElement.lang] || K.en;
+  for (var kk in TK) T[kk] = TK[kk];
+  var keysMode = document.documentElement.getAttribute('data-mode') === 'keys';
+  if (keysMode) {
+    document.querySelector('[data-i18n="title"]').setAttribute('data-i18n', 'kTitle');
+    document.querySelector('[data-i18n="lead"]').setAttribute('data-i18n', 'kLead');
+  }
+  document.title = keysMode ? T.kPageTitle : T.pageTitle;
   document.querySelectorAll('[data-i18n]').forEach(function (el) { el.textContent = T[el.getAttribute('data-i18n')]; });
   document.querySelectorAll('[data-i18n-ph]').forEach(function (el) { el.placeholder = T[el.getAttribute('data-i18n-ph')]; });
 
   var $ = function (id) { return document.getElementById(id); };
   var tab = 'xtream';
   var code = (location.search.match(/[?&]c=(\d{6})/) || [])[1];
-  if (code) $('code').value = code;
+  if (code) { $('code').value = code; $('kcode').value = code; }
+  if (keysMode) { $('f').hidden = true; $('k').hidden = false; }
 
   document.querySelectorAll('[data-tab]').forEach(function (b) {
     b.addEventListener('click', function () {
@@ -142,11 +181,30 @@
     clearInterval(poll);
     poll = setInterval(function () {
       fetch('/status?c=' + c, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
-        if (j.state === 'ok') { clearInterval(poll); show('ok', '✓ ' + (j.msg || T.added)); }
-        else if (j.state === 'error') { clearInterval(poll); show('error', j.msg || T.loadFail); $('f').querySelector('button.go').disabled = false; }
+        if (j.state === 'ok') { clearInterval(poll); show('ok', '✓ ' + (j.msg || (keysMode ? T.kAdded : T.added))); }
+        else if (j.state === 'error') { clearInterval(poll); show('error', j.msg || T.loadFail); document.querySelectorAll('button.go').forEach(function (b) { b.disabled = false; }); }
       }).catch(function () { clearInterval(poll); });
     }, 1500);
   }
+
+  $('k').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var c = $('kcode').value.replace(/\D/g, '');
+    if (c.length !== 6) return show('error', T.needCode);
+    var keys = { tmdb: $('ktmdb').value.trim(), omdb: $('komdb').value.trim() };
+    if (!keys.tmdb && !keys.omdb) return show('error', T.kNeedOne);
+    var btn = $('k').querySelector('button.go');
+    btn.disabled = true;
+    show('', T.sending);
+    fetch('/add', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: c, keys: keys }) })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (x) {
+        if (!x.ok) { btn.disabled = false; return show('error', x.j.error || T.sendFail); }
+        show('', T.kSent);
+        watch(c);
+      })
+      .catch(function () { btn.disabled = false; show('error', T.unreachable); });
+  });
 
   $('f').addEventListener('submit', function (e) {
     e.preventDefault();

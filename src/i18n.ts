@@ -115,6 +115,10 @@ const it = {
   'set.metaBad': "Chiave non valida: {s}",
   'set.metaPrivacy': "Per cercare i dettagli, i titoli che apri vengono inviati a TMDB e OMDb. Le chiavi sono salvate cifrate su questo dispositivo.",
   'set.tmdbNotice': "Questo prodotto usa le API di TMDB ma non è approvato né certificato da TMDB.",
+  'set.metaPhone': "Inserisci dallo smartphone (QR)",
+  'set.metaPhoneTitle': "Chiavi API dallo smartphone",
+  'set.metaPhoneStep': "Incolla le chiavi e premi «Invia alla TV».",
+  'set.metaNone': "Nessuna chiave ricevuta",
 };
 
 export type Key = keyof typeof it;
@@ -226,6 +230,10 @@ const en: Dict = {
   'set.metaBad': "Invalid key: {s}",
   'set.metaPrivacy': "To look up details, the titles you open are sent to TMDB and OMDb. Keys are stored encrypted on this device.",
   'set.tmdbNotice': "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+  'set.metaPhone': "Enter from your phone (QR)",
+  'set.metaPhoneTitle': "API keys from your phone",
+  'set.metaPhoneStep': "Paste the keys and tap “Send to TV”.",
+  'set.metaNone': "No key received",
 };
 
 const es: Dict = {
@@ -334,6 +342,10 @@ const es: Dict = {
   'set.metaBad': "Clave no válida: {s}",
   'set.metaPrivacy': "Para buscar los detalles, los títulos que abres se envían a TMDB y OMDb. Las claves se guardan cifradas en este dispositivo.",
   'set.tmdbNotice': "Este producto usa la API de TMDB, pero TMDB no lo respalda ni lo certifica.",
+  'set.metaPhone': "Introducir desde el móvil (QR)",
+  'set.metaPhoneTitle': "Claves API desde el móvil",
+  'set.metaPhoneStep': "Pega las claves y pulsa «Enviar a la TV».",
+  'set.metaNone': "No se ha recibido ninguna clave",
 };
 
 const de: Dict = {
@@ -442,6 +454,10 @@ const de: Dict = {
   'set.metaBad': "Ungültiger Schlüssel: {s}",
   'set.metaPrivacy': "Um Details zu finden, werden die Titel, die du öffnest, an TMDB und OMDb gesendet. Die Schlüssel werden verschlüsselt auf diesem Gerät gespeichert.",
   'set.tmdbNotice': "Dieses Produkt nutzt die TMDB-API, ist aber nicht von TMDB unterstützt oder zertifiziert.",
+  'set.metaPhone': "Vom Smartphone eingeben (QR)",
+  'set.metaPhoneTitle': "API-Schlüssel vom Smartphone",
+  'set.metaPhoneStep': "Schlüssel einfügen und „An TV senden“ tippen.",
+  'set.metaNone': "Kein Schlüssel empfangen",
 };
 
 export const LANGS = [
