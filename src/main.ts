@@ -8,16 +8,20 @@ import { liveView } from './ui/live';
 import { welcome } from './ui/onboard';
 import { playerOpen } from './ui/player';
 import { settingsView } from './ui/settings';
+import { applyTheme } from './ui/theme';
+import { currentLang, t, type Key } from './i18n';
+
+applyTheme();
 
 type Route = 'home' | 'live' | 'movies' | 'series' | 'favorites' | 'search' | 'settings';
-const NAV: [Route, string, string][] = [
-  ['home', 'Home', 'home'], ['live', 'TV in diretta', 'live'], ['movies', 'Film', 'movie'], ['series', 'Serie', 'series'],
-  ['favorites', 'Preferiti', 'heart'], ['search', 'Cerca', 'search'], ['settings', 'Impostazioni', 'settings'],
+const NAV: [Route, Key, string][] = [
+  ['home', 'nav.home', 'home'], ['live', 'nav.live', 'live'], ['movies', 'nav.movies', 'movie'], ['series', 'nav.series', 'series'],
+  ['favorites', 'nav.favorites', 'heart'], ['search', 'nav.search', 'search'], ['settings', 'nav.settings', 'settings'],
 ];
 
 const app = document.getElementById('app')!;
 const main = h('main', { class: 'main', id: 'main' });
-const nav = h('nav', { class: 'sidebar', 'aria-label': 'Navigazione' });
+const nav = h('nav', { class: 'sidebar' });
 
 const route = (): Route => {
   const r = location.hash.replace(/^#\/?/, '') as Route;
@@ -32,11 +36,12 @@ function renderNav() {
   const r = route();
   const src = active();
   clear(nav);
+  nav.setAttribute('aria-label', t('nav.aria'));
   nav.append(
     h('a', { class: 'brand', href: '#/home', 'aria-label': 'ORBITA home' }, h('div', { class: 'orbit-logo' }, h('i'), h('b')), h('span', null, 'ORBITA')),
-    h('div', { class: 'nav-items' }, NAV.map(([k, label, ic]) =>
-      h('a', { class: 'nav-item' + (k === r ? ' on' : ''), href: '#/' + k, 'aria-current': k === r ? 'page' : null, title: label }, icon(ic, 22), h('span', null, label)))),
-    src ? h('div', { class: 'nav-src', title: 'Playlist attiva' }, h('i', { class: 'src-dot' }), h('span', null, src.name)) : '',
+    h('div', { class: 'nav-items' }, NAV.map(([k, key, ic]) =>
+      h('a', { class: 'nav-item' + (k === r ? ' on' : ''), href: '#/' + k, 'aria-current': k === r ? 'page' : null, title: t(key) }, icon(ic, 22), h('span', null, t(key))))),
+    src ? h('div', { class: 'nav-src', title: t('nav.activeSource') }, h('i', { class: 'src-dot' }), h('span', null, src.name)) : '',
   );
 }
 
@@ -104,7 +109,7 @@ async function boot() {
   try {
     await init();
   } catch (e) {
-    toast('Impossibile aprire l\'archivio locale: ' + (e as Error).message, 'error');
+    toast(t('boot.storeError', { m: (e as Error).message }), 'error');
   }
   window.addEventListener('hashchange', render);
   document.addEventListener('keydown', spatial);
@@ -127,6 +132,7 @@ async function boot() {
 /** App Android TV / Fire TV: layout da TV e tasto Indietro del telecomando. */
 function setupNative() {
   document.body.classList.add('native');
+  native!.setLang?.(currentLang());
   if (native!.isTv()) {
     document.body.classList.add('tv');
     // 1280 px CSS su qualsiasi TV (720p/1080p/4K): layout completo a tre colonne e testi leggibili da divano

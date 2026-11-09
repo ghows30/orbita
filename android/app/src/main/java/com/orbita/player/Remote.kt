@@ -85,7 +85,7 @@ class Remote(private val ctx: Context, private val onSource: (String) -> Unit) {
     private fun handle(s: Socket) {
         s.soTimeout = 8_000
         val out = s.getOutputStream()
-        if (!local(s.inetAddress)) return send(out, 403, "text/plain", "Solo dalla rete di casa")
+        if (!local(s.inetAddress)) return send(out, 403, "text/plain", L10n.t("homeOnly"))
         val input = BufferedInputStream(s.getInputStream())
         val line = readLine(input) ?: return
         val parts = line.split(' ')
@@ -106,17 +106,17 @@ class Remote(private val ctx: Context, private val onSource: (String) -> Unit) {
                 send(out, 200, "application/json", JSONObject().put("state", state).put("msg", message).toString())
             }
             method == "POST" && path == "/add" -> {
-                if (length !in 1..MAX_BODY) return send(out, 413, "application/json", err("Dati troppo grandi"))
+                if (length !in 1..MAX_BODY) return send(out, 413, "application/json", err(L10n.t("tooBig")))
                 val body = JSONObject(String(readN(input, length), Charsets.UTF_8))
                 if (body.optString("code") != code) {
                     if (++failures >= 5) {
-                        send(out, 403, "application/json", err("Troppi codici errati: riapri il QR sulla TV"))
+                        send(out, 403, "application/json", err(L10n.t("tooManyCodes")))
                         return stop()
                     }
-                    return send(out, 403, "application/json", err("Codice errato: controlla quello sulla TV"))
+                    return send(out, 403, "application/json", err(L10n.t("wrongCode")))
                 }
-                if (state == "loading" || state == "ok") return send(out, 409, "application/json", err("La TV ha già ricevuto una playlist"))
-                val src = body.optJSONObject("source") ?: return send(out, 400, "application/json", err("Dati mancanti"))
+                if (state == "loading" || state == "ok") return send(out, 409, "application/json", err(L10n.t("already")))
+                val src = body.optJSONObject("source") ?: return send(out, 400, "application/json", err(L10n.t("missing")))
                 state = "loading"
                 message = ""
                 onSource(src.toString())
@@ -127,6 +127,7 @@ class Remote(private val ctx: Context, private val onSource: (String) -> Unit) {
     }
 
     private fun page(): String = ctx.assets.open("remote.html").use { String(it.readBytes(), Charsets.UTF_8) }
+        .replaceFirst("<html lang=\"it\">", "<html lang=\"${L10n.lang}\">")
 
     private fun err(m: String) = JSONObject().put("error", m).toString()
 

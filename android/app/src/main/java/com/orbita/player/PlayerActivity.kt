@@ -107,7 +107,7 @@ class PlayerActivity : Activity() {
                 ui.post {
                     val r = retryPending ?: return@post
                     ui.removeCallbacks(r)
-                    status("Rete tornata, riprendo…")
+                    status(L10n.t("netBack"))
                     r.run()
                 }
             }
@@ -117,6 +117,7 @@ class PlayerActivity : Activity() {
     }
 
     private fun parse(r: JSONObject) {
+        L10n.lang = r.optString("lang")
         live = r.optBoolean("live")
         resumeKey = r.optString("resumeKey").ifEmpty { null }
         startAt = (r.optDouble("startAt", 0.0) * 1000).toLong()
@@ -148,7 +149,7 @@ class PlayerActivity : Activity() {
             setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { v -> topBar.visibility = v })
         }
         titleV = TextView(this).apply { setTextColor(Color.WHITE); textSize = 22f; typeface = Typeface.DEFAULT_BOLD; maxLines = 1 }
-        subV = TextView(this).apply { setTextColor(Color.parseColor("#B8BED4")); textSize = 15f; maxLines = 1 }
+        subV = TextView(this).apply { setTextColor(Color.parseColor("#C9C2B8")); textSize = 15f; maxLines = 1 }
         clockV = TextView(this).apply { setTextColor(Color.WHITE); textSize = 18f; typeface = Typeface.DEFAULT_BOLD }
         val texts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; addView(titleV); addView(subV) }
         topBar = LinearLayout(this).apply {
@@ -248,7 +249,7 @@ class PlayerActivity : Activity() {
         // per i canali Xtream prova una volta il formato alternativo (m3u8 <-> ts)
         if (live && !usingAlt && current().alt != null) {
             usingAlt = true
-            status("Provo un formato alternativo…")
+            status(L10n.t("altFormat"))
             load(resume = false)
             return
         }
@@ -256,9 +257,9 @@ class PlayerActivity : Activity() {
         val http = generateSequence<Throwable>(e) { it.cause }.filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()
         if (http != null && http.responseCode in 400..499) {
             status(when (http.responseCode) {
-                401, 403 -> "Accesso negato dal provider (${http.responseCode}). Controlla abbonamento o connessioni attive."
-                404 -> "Contenuto non trovato sul server del provider (404)."
-                else -> "Il provider ha rifiutato la richiesta (${http.responseCode})."
+                401, 403 -> L10n.t("denied", http.responseCode)
+                404 -> L10n.t("notFound")
+                else -> L10n.t("rejected", http.responseCode)
             })
             spinner.visibility = View.GONE
             return
@@ -269,12 +270,12 @@ class PlayerActivity : Activity() {
             val wait = minOf(1000L shl retries, if (live) 8_000L else 15_000L)
             retries++
             if (!live) startAt = player.currentPosition
-            status("Connessione interrotta. Nuovo tentativo tra ${wait / 1000}s ($retries/$max)")
+            status(L10n.t("retry", (wait / 1000).toInt(), retries, max))
             val idx = index
             retryPending = Runnable { retryPending = null; if (idx == index && !isFinishing) load(resume = !live) }
             ui.postDelayed(retryPending!!, wait)
         } else {
-            status("Impossibile riprodurre questo contenuto (${e.errorCodeName}).")
+            status(L10n.t("cannot", e.errorCodeName))
         }
     }
 

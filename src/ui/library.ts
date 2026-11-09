@@ -4,6 +4,7 @@ import { debounce, fmtTime, fold } from '../core/util';
 import { seriesInfo, vodInfo } from '../core/xtream';
 import { active, episodeStreamUrl, hidden, isFav, movieStreamUrl, progressOf, state, toggleFav } from '../state';
 import { clear, h, icon, modal, thumb, toast } from './dom';
+import { locale, num, t } from '../i18n';
 import { channelRequest, play } from './player';
 
 type Item = Movie | Series;
@@ -24,7 +25,7 @@ function poster(x: Item, onOpen: () => void): HTMLElement {
 }
 
 /** Griglia con caricamento progressivo: regge anche decine di migliaia di titoli. */
-function grid(items: Item[], open: (x: Item) => void, empty = 'Nessun titolo.'): HTMLElement {
+function grid(items: Item[], open: (x: Item) => void, empty = t('lib.noTitles')): HTMLElement {
   const g = h('div', { class: 'grid' });
   if (!items.length) return h('div', { class: 'empty' }, empty);
   let i = 0;
@@ -50,8 +51,8 @@ function rail(title: string, nodes: HTMLElement[]): HTMLElement | null {
   return h('section', { class: 'rail' },
     h('div', { class: 'rail-head' }, h('h3', null, title),
       h('div', { class: 'rail-nav' },
-        h('button', { class: 'icon-btn', 'aria-label': 'Indietro', on: { click: () => scroll(-1) } }, icon('back', 18)),
-        h('button', { class: 'icon-btn flip', 'aria-label': 'Avanti', on: { click: () => scroll(1) } }, icon('back', 18)))),
+        h('button', { class: 'icon-btn', 'aria-label': t('common.back'), on: { click: () => scroll(-1) } }, icon('back', 18)),
+        h('button', { class: 'icon-btn flip', 'aria-label': t('common.forward'), on: { click: () => scroll(1) } }, icon('back', 18)))),
     track);
 }
 
@@ -60,11 +61,11 @@ export async function openMovie(m: Movie) {
   const src = active();
   const key = `movie:${m.id}`;
   const p = progressOf(key);
-  const plot = h('p', { class: 'plot' }, src?.type === 'xtream' ? 'Carico la trama…' : '');
+  const plot = h('p', { class: 'plot' }, src?.type === 'xtream' ? t('lib.loadingPlot') : '');
   const facts = h('div', { class: 'facts' });
   const backdrop = h('div', { class: 'd-backdrop' });
   const fav = h('button', { class: 'btn ghost' });
-  const paintFav = () => fav.replaceChildren(icon('heart', 18), isFav('movie', m.id) ? 'Nella mia lista' : 'La mia lista');
+  const paintFav = () => fav.replaceChildren(icon('heart', 18), isFav('movie', m.id) ? t('lib.inMyList') : t('lib.myList'));
   paintFav();
   fav.addEventListener('click', async () => (await toggleFav('movie', m.id), paintFav()));
   const start = (resume: boolean) => {
@@ -72,8 +73,8 @@ export async function openMovie(m: Movie) {
     play({ kind: 'movie', live: false, title: m.name, subtitle: [m.year, m.group].filter(Boolean).join(' · '), logo: m.logo, url: movieStreamUrl(m), resumeKey: key, startAt: resume ? undefined : 0 });
   };
   const actions = h('div', { class: 'row gap wrap' },
-    p && p.pos > 15 ? h('button', { class: 'btn primary', on: { click: () => start(true) } }, icon('play', 18), `Riprendi da ${fmtTime(p.pos)}`) : null,
-    h('button', { class: 'btn ' + (p && p.pos > 15 ? 'ghost' : 'primary'), on: { click: () => start(false) } }, icon('play', 18), p && p.pos > 15 ? 'Dall\'inizio' : 'Guarda'),
+    p && p.pos > 15 ? h('button', { class: 'btn primary', on: { click: () => start(true) } }, icon('play', 18), t('lib.resumeFrom', { t: fmtTime(p.pos) })) : null,
+    h('button', { class: 'btn ' + (p && p.pos > 15 ? 'ghost' : 'primary'), on: { click: () => start(false) } }, icon('play', 18), p && p.pos > 15 ? t('lib.fromStart') : t('common.watch')),
     fav);
   const box = h('div', { class: 'detail' }, backdrop,
     h('div', { class: 'd-body' }, thumb(img(m.logo), m.name, 'poster d-poster'),
@@ -84,8 +85,8 @@ export async function openMovie(m: Movie) {
   if (src?.type === 'xtream' && m.xid) {
     try {
       const i = await vodInfo(src as XtreamSource, m.xid);
-      plot.textContent = i.plot || 'Nessuna trama disponibile.';
-      facts.append(...[['Genere', i.genre], ['Durata', i.duration], ['Regia', i.director], ['Cast', i.cast]]
+      plot.textContent = i.plot || t('lib.noPlot');
+      facts.append(...[[t('lib.genre'), i.genre], [t('lib.duration'), i.duration], [t('lib.director'), i.director], [t('lib.cast'), i.cast]]
         .filter(([, v]) => v).map(([k, v]) => h('div', null, h('b', null, k + ': '), v!)));
       if (i.backdrop) backdrop.appendChild(h('img', { src: img(i.backdrop)!, alt: '', referrerPolicy: 'no-referrer' }));
     } catch {
@@ -102,7 +103,7 @@ export async function openSeries(s: Series, autoEpisode?: Episode) {
   const plot = h('p', { class: 'plot' });
   const backdrop = h('div', { class: 'd-backdrop' });
   const fav = h('button', { class: 'btn ghost' });
-  const paintFav = () => fav.replaceChildren(icon('heart', 18), isFav('series', s.id) ? 'Nella mia lista' : 'La mia lista');
+  const paintFav = () => fav.replaceChildren(icon('heart', 18), isFav('series', s.id) ? t('lib.inMyList') : t('lib.myList'));
   paintFav();
   fav.addEventListener('click', async () => (await toggleFav('series', s.id), paintFav()));
   const resumeBtn = h('div');
@@ -128,7 +129,7 @@ export async function openSeries(s: Series, autoEpisode?: Episode) {
     }
   }
   if (!episodes.length) {
-    epList.replaceChildren(h('div', { class: 'empty' }, 'Nessun episodio disponibile.'));
+    epList.replaceChildren(h('div', { class: 'empty' }, t('lib.noEpisodes')));
     return;
   }
   const playEp = (ep: Episode, resume = true) => {
@@ -139,19 +140,19 @@ export async function openSeries(s: Series, autoEpisode?: Episode) {
   const last = state.history.find((x) => x.seriesId === s.id);
   const lastEp = last && episodes.find((e) => `series:${e.id}` === last.key);
   resumeBtn.replaceChildren(h('button', { class: 'btn primary', on: { click: () => playEp(lastEp || episodes[0]) } }, icon('play', 18),
-    lastEp ? `Riprendi S${lastEp.season} E${lastEp.episode}` : 'Guarda S1 E1'));
+    lastEp ? t('lib.resumeEp', { s: lastEp.season, e: lastEp.episode }) : t('lib.watchFirst')));
 
   const seasons = [...new Set(episodes.map((e) => e.season))];
   let season = lastEp?.season ?? seasons[0];
   const renderSeason = () => {
-    seasonsBar.replaceChildren(...seasons.map((n) => h('button', { class: n === season ? 'on' : '', on: { click: () => ((season = n), renderSeason()) } }, `Stagione ${n}`)));
+    seasonsBar.replaceChildren(...seasons.map((n) => h('button', { class: n === season ? 'on' : '', on: { click: () => ((season = n), renderSeason()) } }, t('lib.season', { n }))));
     epList.replaceChildren(...episodes.filter((e) => e.season === season).map((e) => {
       const p = progressOf(`series:${e.id}`);
       const bar = p?.dur ? h('div', { class: 'card-progress' }, h('i')) : null;
       if (bar && p) (bar.firstChild as HTMLElement).style.width = `${(p.pos / p.dur) * 100}%`;
       return h('button', { class: 'ep', on: { click: () => playEp(e) } },
         h('div', { class: 'ep-art' }, thumb(img(e.logo || s.logo), String(e.episode), 'ep-thumb'), bar),
-        h('div', { class: 'ep-text' }, h('div', { class: 'ep-title' }, `${e.episode}. ${e.title || 'Episodio ' + e.episode}`),
+        h('div', { class: 'ep-text' }, h('div', { class: 'ep-title' }, `${e.episode}. ${e.title || t('lib.episode', { n: e.episode })}`),
           e.plot ? h('div', { class: 'ep-plot' }, e.plot) : null, e.duration ? h('small', { class: 'muted' }, e.duration) : null));
     }));
   };
@@ -169,23 +170,24 @@ export function playEpisode(s: Series, ep: Episode, resume = true) {
 /* ---------------- viste ---------------- */
 function catalog(kind: 'movie' | 'series'): HTMLElement {
   const all: Item[] = (kind === 'movie' ? state.lib!.movies : state.lib!.series).filter((x) => !hidden(x));
-  const groups = ['Tutti', ...new Set(all.map((x) => x.group))];
+  const ALL = '\u0000all';
+  const groups = [ALL, ...new Set(all.map((x) => x.group))];
   const storeKey = `orbita.${kind}Group`;
-  let group = localStorage.getItem(storeKey) || 'Tutti';
-  if (!groups.includes(group)) group = 'Tutti';
+  let group = localStorage.getItem(storeKey) || ALL;
+  if (!groups.includes(group)) group = ALL;
   let sort = localStorage.getItem(`orbita.${kind}Sort`) || 'default';
   let q = '';
   const chips = h('div', { class: 'chips-scroll' });
   const body = h('div');
-  const search = h('input', { class: 'search-input', type: 'search', placeholder: kind === 'movie' ? 'Cerca film…' : 'Cerca serie…' });
-  const sel = h('select', { class: 'select', 'aria-label': 'Ordina' },
-    ...[['default', 'Ordine provider'], ['added', 'Aggiunti di recente'], ['rating', 'Più votati'], ['year', 'Più recenti'], ['az', 'A → Z']].map(([v, l]) => h('option', { value: v }, l)));
+  const search = h('input', { class: 'search-input', type: 'search', placeholder: kind === 'movie' ? t('lib.searchMovies') : t('lib.searchSeries') });
+  const sel = h('select', { class: 'select', 'aria-label': t('lib.sort') },
+    ...[['default', t('lib.sortDefault')], ['added', t('lib.sortAdded')], ['rating', t('lib.sortRating')], ['year', t('lib.sortYear')], ['az', t('lib.sortAz')]].map(([v, l]) => h('option', { value: v }, l)));
   sel.value = sort;
   const open = (x: Item) => (isSeries(x) ? openSeries(x) : openMovie(x as Movie));
 
   const render = () => {
-    chips.replaceChildren(...groups.map((g) => h('button', { class: 'chip-btn' + (g === group ? ' on' : ''), on: { click: () => { group = g; localStorage.setItem(storeKey, g); render(); } } }, g)));
-    let list = group === 'Tutti' ? all : all.filter((x) => x.group === group);
+    chips.replaceChildren(...groups.map((g) => h('button', { class: 'chip-btn' + (g === group ? ' on' : ''), on: { click: () => { group = g; localStorage.setItem(storeKey, g); render(); } } }, g === ALL ? t('lib.all') : g)));
+    let list = group === ALL ? all : all.filter((x) => x.group === group);
     if (q) {
       const f = fold(q);
       list = list.filter((x) => fold(x.name).includes(f));
@@ -194,17 +196,17 @@ function catalog(kind: 'movie' | 'series'): HTMLElement {
       list = list.slice();
       const by: Record<string, (a: Item, b: Item) => number> = {
         added: (a, b) => (b.added || 0) - (a.added || 0), rating: (a, b) => (b.rating || 0) - (a.rating || 0),
-        year: (a, b) => (b.year || 0) - (a.year || 0), az: (a, b) => a.name.localeCompare(b.name, 'it'),
+        year: (a, b) => (b.year || 0) - (a.year || 0), az: (a, b) => a.name.localeCompare(b.name, locale()),
       };
       list.sort(by[sort]);
     }
-    body.replaceChildren(h('div', { class: 'count-line' }, `${list.length.toLocaleString('it-IT')} titoli`), grid(list, open));
+    body.replaceChildren(h('div', { class: 'count-line' }, t('lib.titles', { n: num(list.length) })), grid(list, open));
   };
   search.addEventListener('input', debounce(() => ((q = search.value.trim()), render()), 180));
   sel.addEventListener('change', () => { sort = sel.value; localStorage.setItem(`orbita.${kind}Sort`, sort); render(); });
   render();
   return h('div', { class: 'page' },
-    h('div', { class: 'page-head' }, h('h1', null, kind === 'movie' ? 'Film' : 'Serie TV'), h('div', { class: 'row gap' }, search, sel)),
+    h('div', { class: 'page-head' }, h('h1', null, kind === 'movie' ? t('lib.moviesTitle') : t('lib.seriesTitle')), h('div', { class: 'row gap' }, search, sel)),
     chips, body);
 }
 export const moviesView = () => catalog('movie');
@@ -226,7 +228,7 @@ export function homeView(go: (r: string) => void): HTMLElement {
     return h('button', { class: 'card wide', on: { click: () => (isSeries(target) ? openSeries(target) : openMovie(target as Movie)) } },
       h('div', { class: 'card-art' }, thumb(img(x.logo || target.logo), x.name, 'poster wide'), bar,
         h('span', { class: 'play-over' }, icon('play', 22))),
-      h('div', { class: 'card-title' }, x.name), h('div', { class: 'card-meta' }, `${fmtTime(x.dur - x.pos)} rimanenti`));
+      h('div', { class: 'card-title' }, x.name), h('div', { class: 'card-meta' }, t('lib.left', { t: fmtTime(x.dur - x.pos) })));
   }).filter((x): x is HTMLButtonElement => !!x);
 
   const favLive = live.filter((c) => isFav('live', c.id)).slice(0, 30);
@@ -242,34 +244,34 @@ export function homeView(go: (r: string) => void): HTMLElement {
   const hero = pick ? h('section', { class: 'hero' },
     h('div', { class: 'hero-art' }, thumb(img(pick.logo), pick.name, 'hero-img')),
     h('div', { class: 'hero-text' },
-      h('span', { class: 'eyebrow' }, isSeries(pick) ? 'Serie in evidenza' : 'Film in evidenza'),
+      h('span', { class: 'eyebrow' }, isSeries(pick) ? t('home.featuredSeries') : t('home.featuredMovie')),
       h('h1', null, pick.name),
       h('div', { class: 'chips' }, pick.year ? h('span', { class: 'chip' }, String(pick.year)) : null, pick.rating ? h('span', { class: 'chip' }, icon('star', 12), pick.rating.toFixed(1)) : null, h('span', { class: 'chip' }, pick.group)),
       h('div', { class: 'row gap' },
-        h('button', { class: 'btn primary lg', on: { click: () => open(pick) } }, icon('play', 18), 'Guarda ora'),
-        h('button', { class: 'btn ghost lg', on: { click: () => go('live') } }, icon('live', 18), 'TV in diretta')))) : null;
+        h('button', { class: 'btn primary lg', on: { click: () => open(pick) } }, icon('play', 18), t('home.watchNow')),
+        h('button', { class: 'btn ghost lg', on: { click: () => go('live') } }, icon('live', 18), t('nav.live'))))) : null;
 
   const stats = h('div', { class: 'stats' },
-    ...[['live', live.length, 'Canali', 'live'], ['movie', movies.length, 'Film', 'movies'], ['series', series.length, 'Serie', 'series']].map(([ic, n, l, r]) =>
-      h('button', { class: 'stat', on: { click: () => go(r as string) } }, icon(ic as string, 22), h('b', null, (n as number).toLocaleString('it-IT')), h('span', null, l as string))));
+    ...[['live', live.length, t('common.channels'), 'live'], ['movie', movies.length, t('nav.movies'), 'movies'], ['series', series.length, t('nav.series'), 'series']].map(([ic, n, l, r]) =>
+      h('button', { class: 'stat', on: { click: () => go(r as string) } }, icon(ic as string, 22), h('b', null, num(n as number)), h('span', null, l as string))));
 
   return h('div', { class: 'page home' }, hero, stats,
-    rail('Continua a guardare', cont),
-    rail('Canali preferiti', favLive.map(chTile)),
-    rail('La mia lista', myList.slice(0, 30).map((x) => poster(x, () => open(x)))),
-    rail('Film aggiunti di recente', recent(movies).slice(0, 30).map((x) => poster(x, () => open(x)))),
-    rail('Serie aggiunte di recente', recent(series).slice(0, 30).map((x) => poster(x, () => open(x)))),
-    !favLive.length ? rail('In diretta', live.slice(0, 30).map(chTile)) : null);
+    rail(t('home.continue'), cont),
+    rail(t('home.favChannels'), favLive.map(chTile)),
+    rail(t('lib.myList'), myList.slice(0, 30).map((x) => poster(x, () => open(x)))),
+    rail(t('home.recentMovies'), recent(movies).slice(0, 30).map((x) => poster(x, () => open(x)))),
+    rail(t('home.recentSeries'), recent(series).slice(0, 30).map((x) => poster(x, () => open(x)))),
+    !favLive.length ? rail(t('home.onAir'), live.slice(0, 30).map(chTile)) : null);
 }
 
 export function searchView(): HTMLElement {
-  const input = h('input', { class: 'search-input xl', type: 'search', placeholder: 'Cerca canali, film, serie…' });
+  const input = h('input', { class: 'search-input xl', type: 'search', placeholder: t('search.placeholder') });
   const out = h('div', { class: 'search-out' });
   const lib = state.lib!;
   const run = () => {
     const q = fold(input.value.trim());
     clear(out);
-    if (q.length < 2) return out.appendChild(h('div', { class: 'empty' }, 'Scrivi almeno 2 lettere.'));
+    if (q.length < 2) return out.appendChild(h('div', { class: 'empty' }, t('search.min')));
     const words = q.split(/\s+/);
     const match = (s: string) => {
       const f = fold(s);
@@ -278,22 +280,22 @@ export function searchView(): HTMLElement {
     const ch = lib.live.filter((c) => !hidden(c) && match(c.name)).slice(0, 40);
     const mv = lib.movies.filter((m) => !hidden(m) && match(m.name)).slice(0, 120);
     const sr = lib.series.filter((m) => !hidden(m) && match(m.name)).slice(0, 120);
-    if (!ch.length && !mv.length && !sr.length) return out.appendChild(h('div', { class: 'empty' }, 'Nessun risultato.'));
-    if (ch.length) out.appendChild(rail(`Canali (${ch.length})`, ch.map((c) => h('button', { class: 'ch-tile', on: { click: () => play(channelRequest(c), ch) } }, thumb(img(c.logo), c.name, 'ch-logo lg'), h('span', null, c.name))))!);
-    if (mv.length) out.append(h('h3', { class: 'sec-title' }, `Film (${mv.length})`), grid(mv, (x) => openMovie(x as Movie)));
-    if (sr.length) out.append(h('h3', { class: 'sec-title' }, `Serie (${sr.length})`), grid(sr, (x) => openSeries(x as Series)));
+    if (!ch.length && !mv.length && !sr.length) return out.appendChild(h('div', { class: 'empty' }, t('search.none')));
+    if (ch.length) out.appendChild(rail(t('search.channels', { n: ch.length }), ch.map((c) => h('button', { class: 'ch-tile', on: { click: () => play(channelRequest(c), ch) } }, thumb(img(c.logo), c.name, 'ch-logo lg'), h('span', null, c.name))))!);
+    if (mv.length) out.append(h('h3', { class: 'sec-title' }, t('search.movies', { n: mv.length })), grid(mv, (x) => openMovie(x as Movie)));
+    if (sr.length) out.append(h('h3', { class: 'sec-title' }, t('search.series', { n: sr.length })), grid(sr, (x) => openSeries(x as Series)));
   };
   input.addEventListener('input', debounce(run, 200));
   if (!document.body.classList.contains('tv')) setTimeout(() => input.focus(), 50); // su TV la tastiera si apre solo con OK
-  return h('div', { class: 'page' }, h('div', { class: 'page-head' }, h('h1', null, 'Cerca')), input, out);
+  return h('div', { class: 'page' }, h('div', { class: 'page-head' }, h('h1', null, t('nav.search'))), input, out);
 }
 
 export function favoritesView(): HTMLElement {
   const lib = state.lib!;
   const ch = lib.live.filter((c) => isFav('live', c.id) && !hidden(c));
   const items: Item[] = [...lib.movies.filter((m) => isFav('movie', m.id)), ...lib.series.filter((s) => isFav('series', s.id))].filter((x) => !hidden(x));
-  return h('div', { class: 'page' }, h('div', { class: 'page-head' }, h('h1', null, 'Preferiti')),
-    ch.length ? rail('Canali', ch.map((c) => h('button', { class: 'ch-tile', on: { click: () => play(channelRequest(c), ch) } }, thumb(img(c.logo), c.name, 'ch-logo lg'), h('span', null, c.name)))) : null,
-    h('h3', { class: 'sec-title' }, 'Film e serie'),
-    grid(items, (x) => (isSeries(x) ? openSeries(x) : openMovie(x as Movie)), 'Aggiungi film e serie con "La mia lista".'));
+  return h('div', { class: 'page' }, h('div', { class: 'page-head' }, h('h1', null, t('nav.favorites'))),
+    ch.length ? rail(t('common.channels'), ch.map((c) => h('button', { class: 'ch-tile', on: { click: () => play(channelRequest(c), ch) } }, thumb(img(c.logo), c.name, 'ch-logo lg'), h('span', null, c.name)))) : null,
+    h('h3', { class: 'sec-title' }, t('fav.moviesSeries')),
+    grid(items, (x) => (isSeries(x) ? openSeries(x) : openMovie(x as Movie)), t('fav.empty')));
 }

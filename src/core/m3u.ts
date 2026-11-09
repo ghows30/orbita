@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import type { Channel, Episode, Library, Movie, Series } from './types';
 import { cleanTitle, decodeEntities, hash, isAdult } from './util';
 
@@ -76,7 +77,7 @@ export function parseM3u(text: string): Library {
     if (!isHttp(url) || SEPARATOR.test(info.name) || !info.name) continue;
 
     const a = info.attrs;
-    const group = decodeEntities(a['group-title'] || extGroup || 'Altro');
+    const group = decodeEntities(a['group-title'] || extGroup || t('common.other'));
     const logo = isHttp(a['tvg-logo'] || '') ? a['tvg-logo'] : undefined;
     const kind = classify(url, info.name, group);
     const adult = isAdult(group, info.name) || undefined;

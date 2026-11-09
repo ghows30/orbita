@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import { fetchEpg, fetchText } from './core/api';
 import { parseM3u } from './core/m3u';
 import { checkPin, hashPin, kv, sealGet, sealSet, type PinHash } from './core/store';
@@ -78,10 +79,10 @@ export async function switchSource(id: string) {
 
 export async function loadLibrary(src: Source, onStep?: (m: string) => void, fileText?: string): Promise<Library> {
   if (src.type === 'xtream') return loadXtream(src, onStep);
-  onStep?.('Scarico la playlist…');
+  onStep?.(t('step.playlist'));
   const text = src.type === 'file' ? fileText ?? '' : await fetchText(src.url, src.ua);
-  if (!/#EXTM3U|#EXTINF/i.test(text.slice(0, 4096))) throw new Error('Il file non sembra una playlist M3U valida.');
-  onStep?.('Analizzo la playlist…');
+  if (!/#EXTM3U|#EXTINF/i.test(text.slice(0, 4096))) throw new Error(t('err.notM3u'));
+  onStep?.(t('step.parse'));
   await new Promise((r) => setTimeout(r, 0));
   return parseM3u(text);
 }

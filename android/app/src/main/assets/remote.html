@@ -4,28 +4,28 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<title>ORBITA · Aggiungi playlist</title>
+<title>ORBITA</title>
 <style>
-  :root { --bg: #07090f; --bg-2: #0c1019; --line: rgba(255,255,255,.13); --text: #eef1f8; --muted: #8b93ab; --accent: #7c5cff; --accent-2: #22d3ee; --ok: #34d399; --err: #f87171; }
+  :root { --bg: #0e0d0c; --bg-2: #1c1a17; --line: rgba(244,239,231,.15); --text: #f4efe7; --muted: #a69d90; --accent: #ff5626; --on-accent: #160803; --ok: #7fc47a; --err: #ff5a4f; }
   * { box-sizing: border-box; }
   body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   main { max-width: 520px; margin: 0 auto; padding: 24px 16px 40px; }
-  h1 { font-size: 1.5rem; margin: 0 0 4px; }
-  h1 span { background: linear-gradient(90deg, var(--accent), var(--accent-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; font-weight: 850; letter-spacing: -.02em; }
+  h1 .brand { color: var(--accent); }
   p.muted, small { color: var(--muted); }
   small { display: block; font-size: .8rem; margin-top: 4px; }
-  .seg { display: flex; gap: 4px; padding: 4px; margin: 20px 0 8px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; }
-  .seg button { flex: 1; padding: 10px; border: 0; border-radius: 9px; background: none; color: var(--muted); font: inherit; font-weight: 600; }
-  .seg button.on { background: var(--accent); color: #fff; }
+  .seg { display: flex; gap: 4px; padding: 4px; margin: 20px 0 8px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 8px; }
+  .seg button { flex: 1; padding: 10px; border: 0; border-radius: 6px; background: none; color: var(--muted); font: inherit; font-weight: 600; }
+  .seg button.on { background: var(--text); color: var(--bg); }
   label { display: block; margin-top: 14px; font-weight: 600; font-size: .92rem; }
-  input, select { width: 100%; margin-top: 6px; padding: 12px; font: inherit; font-size: 16px; color: var(--text); background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; }
+  input, select { width: 100%; margin-top: 6px; padding: 12px; font: inherit; font-size: 16px; color: var(--text); background: var(--bg-2); border: 1px solid var(--line); border-radius: 8px; }
   input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   #code { font-size: 1.4rem; letter-spacing: .3em; text-align: center; font-variant-numeric: tabular-nums; }
   details { margin-top: 16px; color: var(--muted); }
   summary { cursor: pointer; }
-  button.go { width: 100%; margin-top: 24px; padding: 14px; border: 0; border-radius: 12px; font: inherit; font-weight: 700; color: #fff; background: linear-gradient(90deg, var(--accent), #5b8cff); }
+  button.go { width: 100%; margin-top: 24px; padding: 14px; border: 0; border-radius: 8px; font: inherit; font-weight: 750; color: var(--on-accent); background: var(--accent); }
   button.go:disabled { opacity: .5; }
-  .status { margin-top: 18px; padding: 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg-2); }
+  .status { margin-top: 18px; padding: 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg-2); }
   .status.ok { border-color: var(--ok); color: var(--ok); }
   .status.error { border-color: var(--err); color: var(--err); }
   [hidden] { display: none !important; }
@@ -34,49 +34,89 @@
 </head>
 <body>
 <main>
-  <h1>Aggiungi a <span>ORBITA</span></h1>
-  <p class="muted">Compila qui e la playlist arriva sulla TV.</p>
+  <h1><span data-i18n="title">Aggiungi a</span> <span class="brand">ORBITA</span></h1>
+  <p class="muted" data-i18n="lead">Compila qui e la playlist arriva sulla TV.</p>
 
   <form id="f" autocomplete="off" novalidate>
-    <label>Codice mostrato sulla TV
+    <label><span data-i18n="code">Codice mostrato sulla TV</span>
       <input id="code" inputmode="numeric" maxlength="6" pattern="\d{6}" placeholder="000000" required>
     </label>
 
     <div class="seg" role="tablist">
       <button type="button" data-tab="xtream" class="on">Xtream Codes</button>
-      <button type="button" data-tab="m3u">Link M3U</button>
+      <button type="button" data-tab="m3u" data-i18n="tabM3u">Link M3U</button>
     </div>
 
-    <label>Nome <input id="name" maxlength="40" placeholder="Es. Casa"></label>
+    <label><span data-i18n="name">Nome</span> <input id="name" maxlength="40" data-i18n-ph="namePh" placeholder="Es. Casa"></label>
 
     <div data-for="xtream">
       <label>Server <input id="host" placeholder="http://server.tld:8080" autocapitalize="off" spellcheck="false">
-        <small>Puoi anche incollare il link get.php completo.</small></label>
-      <label>Utente <input id="user" autocapitalize="off" spellcheck="false"></label>
-      <label>Password <input id="pass" type="password" autocomplete="new-password"></label>
-      <label>Formato live
-        <select id="format"><option value="m3u8">HLS (.m3u8) – consigliato</option><option value="ts">MPEG-TS (.ts)</option></select>
+        <small data-i18n="serverHint">Puoi anche incollare il link get.php completo.</small></label>
+      <label><span data-i18n="user">Utente</span> <input id="user" autocapitalize="off" spellcheck="false"></label>
+      <label><span data-i18n="pass">Password</span> <input id="pass" type="password" autocomplete="new-password"></label>
+      <label><span data-i18n="format">Formato live</span>
+        <select id="format"><option value="m3u8" data-i18n="hls">HLS (.m3u8) – consigliato</option><option value="ts">MPEG-TS (.ts)</option></select>
       </label>
     </div>
 
     <div data-for="m3u" hidden>
-      <label>URL playlist <input id="url" type="url" placeholder="https://…/playlist.m3u" autocapitalize="off" spellcheck="false"></label>
+      <label><span data-i18n="url">URL playlist</span> <input id="url" type="url" placeholder="https://…/playlist.m3u" autocapitalize="off" spellcheck="false"></label>
     </div>
 
     <details>
-      <summary>Opzioni avanzate</summary>
-      <label>Guida TV (XMLTV) <input id="epg" type="url" placeholder="https://…/guide.xml(.gz) – opzionale" autocapitalize="off" spellcheck="false"></label>
-      <label>User-Agent <input id="ua" maxlength="200" placeholder="Predefinito: VLC"></label>
+      <summary data-i18n="advanced">Opzioni avanzate</summary>
+      <label><span data-i18n="epg">Guida TV (XMLTV)</span> <input id="epg" type="url" data-i18n-ph="epgPh" placeholder="https://…/guide.xml(.gz) – opzionale" autocapitalize="off" spellcheck="false"></label>
+      <label>User-Agent <input id="ua" maxlength="200" data-i18n-ph="uaPh" placeholder="Predefinito: VLC"></label>
     </details>
 
-    <button class="go" type="submit">Invia alla TV</button>
+    <button class="go" type="submit" data-i18n="send">Invia alla TV</button>
   </form>
 
   <div id="status" class="status" hidden></div>
-  <p class="fine">I dati passano solo nella rete di casa, direttamente alla TV. ORBITA non fornisce contenuti.</p>
+  <p class="fine" data-i18n="fine">I dati passano solo nella rete di casa, direttamente alla TV. ORBITA non fornisce contenuti.</p>
 </main>
 <script>
 (function () {
+  // la TV scrive qui la lingua scelta nelle sue Impostazioni (<html lang="…">)
+  var L = {
+    it: { pageTitle: 'ORBITA · Aggiungi playlist', title: 'Aggiungi a', lead: 'Compila qui e la playlist arriva sulla TV.', code: 'Codice mostrato sulla TV',
+      tabM3u: 'Link M3U', name: 'Nome', namePh: 'Es. Casa', serverHint: 'Puoi anche incollare il link get.php completo.', user: 'Utente', pass: 'Password',
+      format: 'Formato live', hls: 'HLS (.m3u8) – consigliato', url: 'URL playlist', advanced: 'Opzioni avanzate', epg: 'Guida TV (XMLTV)',
+      epgPh: 'https://…/guide.xml(.gz) – opzionale', uaPh: 'Predefinito: VLC', send: 'Invia alla TV',
+      fine: 'I dati passano solo nella rete di casa, direttamente alla TV. ORBITA non fornisce contenuti.',
+      added: 'Playlist aggiunta sulla TV.', loadFail: 'Caricamento non riuscito.', needCode: 'Inserisci il codice di 6 cifre che vedi sulla TV.',
+      needHost: 'Inserisci l’indirizzo del server.', badUrl: 'Inserisci un URL http(s) valido.', sending: 'Invio alla TV…', sendFail: 'Invio non riuscito.',
+      sent: 'Inviata! La TV sta caricando la playlist…', unreachable: 'TV non raggiungibile. Controlla che il QR sia ancora aperto sulla TV e di essere sulla stessa rete Wi-Fi.' },
+    en: { pageTitle: 'ORBITA · Add playlist', title: 'Add to', lead: 'Fill this in and the playlist goes straight to the TV.', code: 'Code shown on the TV',
+      tabM3u: 'M3U link', name: 'Name', namePh: 'e.g. Home', serverHint: 'You can also paste the full get.php link.', user: 'Username', pass: 'Password',
+      format: 'Live format', hls: 'HLS (.m3u8) – recommended', url: 'Playlist URL', advanced: 'Advanced options', epg: 'TV guide (XMLTV)',
+      epgPh: 'https://…/guide.xml(.gz) – optional', uaPh: 'Default: VLC', send: 'Send to TV',
+      fine: 'Your data only travels on your home network, straight to the TV. ORBITA provides no content.',
+      added: 'Playlist added on the TV.', loadFail: 'Loading failed.', needCode: 'Enter the 6-digit code you see on the TV.',
+      needHost: 'Enter the server address.', badUrl: 'Enter a valid http(s) URL.', sending: 'Sending to the TV…', sendFail: 'Sending failed.',
+      sent: 'Sent! The TV is loading the playlist…', unreachable: 'TV unreachable. Check that the QR is still open on the TV and that you are on the same Wi-Fi.' },
+    es: { pageTitle: 'ORBITA · Añadir lista', title: 'Añadir a', lead: 'Rellena esto y la lista llega a la TV.', code: 'Código que aparece en la TV',
+      tabM3u: 'Enlace M3U', name: 'Nombre', namePh: 'P. ej. Casa', serverHint: 'También puedes pegar el enlace get.php completo.', user: 'Usuario', pass: 'Contraseña',
+      format: 'Formato en directo', hls: 'HLS (.m3u8) – recomendado', url: 'URL de la lista', advanced: 'Opciones avanzadas', epg: 'Guía de TV (XMLTV)',
+      epgPh: 'https://…/guide.xml(.gz) – opcional', uaPh: 'Por defecto: VLC', send: 'Enviar a la TV',
+      fine: 'Los datos solo viajan por tu red doméstica, directos a la TV. ORBITA no ofrece contenidos.',
+      added: 'Lista añadida en la TV.', loadFail: 'No se pudo cargar.', needCode: 'Introduce el código de 6 cifras que ves en la TV.',
+      needHost: 'Introduce la dirección del servidor.', badUrl: 'Introduce una URL http(s) válida.', sending: 'Enviando a la TV…', sendFail: 'No se pudo enviar.',
+      sent: '¡Enviada! La TV está cargando la lista…', unreachable: 'TV no accesible. Comprueba que el QR sigue abierto en la TV y que estás en la misma red Wi-Fi.' },
+    de: { pageTitle: 'ORBITA · Playlist hinzufügen', title: 'Hinzufügen zu', lead: 'Hier ausfüllen, und die Playlist landet auf dem TV.', code: 'Code auf dem TV',
+      tabM3u: 'M3U-Link', name: 'Name', namePh: 'z. B. Zuhause', serverHint: 'Du kannst auch den vollständigen get.php-Link einfügen.', user: 'Benutzername', pass: 'Passwort',
+      format: 'Live-Format', hls: 'HLS (.m3u8) – empfohlen', url: 'Playlist-URL', advanced: 'Erweiterte Optionen', epg: 'TV-Programm (XMLTV)',
+      epgPh: 'https://…/guide.xml(.gz) – optional', uaPh: 'Standard: VLC', send: 'An TV senden',
+      fine: 'Deine Daten bleiben im Heimnetz und gehen direkt an den TV. ORBITA liefert keine Inhalte.',
+      added: 'Playlist auf dem TV hinzugefügt.', loadFail: 'Laden fehlgeschlagen.', needCode: 'Gib den 6-stelligen Code vom TV ein.',
+      needHost: 'Gib die Serveradresse ein.', badUrl: 'Gib eine gültige http(s)-URL ein.', sending: 'Wird an den TV gesendet…', sendFail: 'Senden fehlgeschlagen.',
+      sent: 'Gesendet! Der TV lädt die Playlist…', unreachable: 'TV nicht erreichbar. Prüfe, ob der QR-Code noch auf dem TV offen ist und du im selben WLAN bist.' }
+  };
+  var T = L[document.documentElement.lang] || L.en;
+  document.title = T.pageTitle;
+  document.querySelectorAll('[data-i18n]').forEach(function (el) { el.textContent = T[el.getAttribute('data-i18n')]; });
+  document.querySelectorAll('[data-i18n-ph]').forEach(function (el) { el.placeholder = T[el.getAttribute('data-i18n-ph')]; });
+
   var $ = function (id) { return document.getElementById(id); };
   var tab = 'xtream';
   var code = (location.search.match(/[?&]c=(\d{6})/) || [])[1];
@@ -102,8 +142,8 @@
     clearInterval(poll);
     poll = setInterval(function () {
       fetch('/status?c=' + c, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
-        if (j.state === 'ok') { clearInterval(poll); show('ok', '✓ ' + (j.msg || 'Playlist aggiunta sulla TV.')); }
-        else if (j.state === 'error') { clearInterval(poll); show('error', j.msg || 'Caricamento non riuscito.'); $('f').querySelector('button.go').disabled = false; }
+        if (j.state === 'ok') { clearInterval(poll); show('ok', '✓ ' + (j.msg || T.added)); }
+        else if (j.state === 'error') { clearInterval(poll); show('error', j.msg || T.loadFail); $('f').querySelector('button.go').disabled = false; }
       }).catch(function () { clearInterval(poll); });
     }, 1500);
   }
@@ -111,27 +151,27 @@
   $('f').addEventListener('submit', function (e) {
     e.preventDefault();
     var c = $('code').value.replace(/\D/g, '');
-    if (c.length !== 6) return show('error', 'Inserisci il codice di 6 cifre che vedi sulla TV.');
+    if (c.length !== 6) return show('error', T.needCode);
     var v = function (id) { return $(id).value.trim(); };
     var src = { type: tab, name: v('name'), epgUrl: v('epg'), ua: v('ua') };
     if (tab === 'xtream') {
       src.host = v('host'); src.user = v('user'); src.pass = $('pass').value; src.format = $('format').value;
-      if (!src.host) return show('error', 'Inserisci l\'indirizzo del server.');
+      if (!src.host) return show('error', T.needHost);
     } else {
       src.url = v('url');
-      if (!/^https?:\/\/\S+$/i.test(src.url)) return show('error', 'Inserisci un URL http(s) valido.');
+      if (!/^https?:\/\/\S+$/i.test(src.url)) return show('error', T.badUrl);
     }
     var btn = $('f').querySelector('button.go');
     btn.disabled = true;
-    show('', 'Invio alla TV…');
+    show('', T.sending);
     fetch('/add', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: c, source: src }) })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (x) {
-        if (!x.ok) { btn.disabled = false; return show('error', x.j.error || 'Invio non riuscito.'); }
-        show('', 'Inviata! La TV sta caricando la playlist…');
+        if (!x.ok) { btn.disabled = false; return show('error', x.j.error || T.sendFail); }
+        show('', T.sent);
         watch(c);
       })
-      .catch(function () { btn.disabled = false; show('error', 'TV non raggiungibile. Controlla che il QR sia ancora aperto sulla TV e di essere sulla stessa rete Wi-Fi.'); });
+      .catch(function () { btn.disabled = false; show('error', T.unreachable); });
   });
 })();
 </script>

@@ -49,7 +49,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
         web = WebView(this).apply {
-            setBackgroundColor(Color.parseColor("#07090F"))
+            setBackgroundColor(Color.parseColor("#0E0D0C"))
             isFocusable = true
             isFocusableInTouchMode = true
             overScrollMode = View.OVER_SCROLL_NEVER
@@ -125,7 +125,7 @@ class MainActivity : Activity() {
             if (now - lastBack < 2000) finish()
             else {
                 lastBack = now
-                Toast.makeText(this, "Premi di nuovo Indietro per uscire", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, L10n.t("backAgain"), Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -190,6 +190,10 @@ class MainActivity : Activity() {
 
         @JavascriptInterface
         fun remoteResult(ok: Boolean, msg: String) = remote.result(ok, msg)
+
+        /** Lingua scelta nelle Impostazioni: testi nativi e pagina per lo smartphone. */
+        @JavascriptInterface
+        fun setLang(lang: String) { L10n.lang = lang }
     }
 
     /* ---------------- origine interna ---------------- */

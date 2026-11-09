@@ -5,6 +5,7 @@ import type { Channel, EpgItem, PlayRequest } from '../core/types';
 import { clock, fmtTime } from '../core/util';
 import { active, channelUrl, epgFor, hidden, nowNext, progressOf, recordProgress, state } from '../state';
 import { h, icon, thumb, toast, clear } from './dom';
+import { currentLang, locale, t } from '../i18n';
 
 type Engine = { destroy(): void; audio?: () => Track[]; setAudio?: (i: number) => void; subs?: () => Track[]; setSub?: (i: number) => void; levels?: () => Track[]; setLevel?: (i: number) => void };
 interface Track { id: number; label: string; active: boolean }
@@ -38,7 +39,7 @@ function playNative(req: PlayRequest, playlist?: Channel[]) {
     list = [{ id: req.resumeKey || '', title: req.title, subtitle: req.subtitle || '', url: req.url }];
   }
   nativeReq = req;
-  native!.play(JSON.stringify({ live: req.live, resumeKey: req.resumeKey, startAt: req.startAt || 0, ua: src?.ua, list, index }));
+  native!.play(JSON.stringify({ live: req.live, resumeKey: req.resumeKey, startAt: req.startAt || 0, ua: src?.ua, list, index, lang: currentLang() }));
 }
 
 if (native) {
@@ -61,7 +62,7 @@ if (native) {
       const eps = req.series.episodes;
       const nx = eps[eps.findIndex((e) => e.id === req.episode?.id) + 1];
       if (nx) {
-        toast(`Prossimo episodio: S${nx.season} E${nx.episode}`);
+        toast(t('pl.nextEp', { s: nx.season, e: nx.episode }));
         document.dispatchEvent(new CustomEvent('orbita:play-episode', { detail: { series: req.series, episode: nx } }));
         return;
       }
@@ -90,14 +91,14 @@ class PlayerView {
   sub = h('div', { class: 'p-sub' });
   logoBox = h('div', { class: 'p-logo' });
   status = h('div', { class: 'p-status' });
-  progress = h('input', { type: 'range', class: 'p-seek', min: 0, max: 1000, value: 0, step: 1, 'aria-label': 'Posizione' });
+  progress = h('input', { type: 'range', class: 'p-seek', min: 0, max: 1000, value: 0, step: 1, 'aria-label': t('pl.position') });
   timeL = h('span', { class: 'p-time' }, '00:00');
   timeR = h('span', { class: 'p-time' }, '');
   liveBadge = h('span', { class: 'live-badge' }, 'LIVE');
-  playBtn = h('button', { class: 'p-btn big', 'aria-label': 'Play/Pausa' });
-  muteBtn = h('button', { class: 'p-btn', 'aria-label': 'Audio' });
+  playBtn = h('button', { class: 'p-btn big', 'aria-label': t('pl.playPause') });
+  muteBtn = h('button', { class: 'p-btn', 'aria-label': t('pl.audio') });
   vol = h('input', { type: 'range', class: 'p-vol', min: 0, max: 1, step: 0.05, value: 1, 'aria-label': 'Volume' });
-  fsBtn = h('button', { class: 'p-btn', 'aria-label': 'Schermo intero' });
+  fsBtn = h('button', { class: 'p-btn', 'aria-label': t('pl.fullscreen') });
   menu = h('div', { class: 'p-menu', hidden: true });
   drawer = h('aside', { class: 'p-drawer', hidden: true });
   epgLine = h('div', { class: 'p-epg' });
@@ -139,27 +140,27 @@ class PlayerView {
       h('div', { class: 'p-shade' }),
       this.status,
       h('div', { class: 'p-top' },
-        btn('back', 'Indietro (Esc)', () => this.close()),
+        btn('back', t('pl.backEsc'), () => this.close()),
         this.logoBox,
         h('div', { class: 'p-head' }, this.title, this.sub),
         h('div', { class: 'p-top-right' }, h('span', { class: 'p-clock' })),
       ),
       h('div', { class: 'p-center' },
-        btn('rew', 'Indietro 10s', () => this.seekBy(-10), 'p-btn mid vod-only'),
+        btn('rew', t('pl.rew'), () => this.seekBy(-10), 'p-btn mid vod-only'),
         this.playBtn,
-        btn('fwd', 'Avanti 30s', () => this.seekBy(30), 'p-btn mid vod-only'),
+        btn('fwd', t('pl.fwd'), () => this.seekBy(30), 'p-btn mid vod-only'),
       ),
       h('div', { class: 'p-bottom' },
         this.epgLine,
         h('div', { class: 'p-bar' }, this.timeL, this.progress, this.timeR, this.liveBadge),
         h('div', { class: 'p-row' },
           h('div', { class: 'p-group' },
-            btn('up', 'Canale precedente', () => this.zap(-1), 'p-btn live-only'),
-            btn('down', 'Canale successivo', () => this.zap(1), 'p-btn live-only'),
+            btn('up', t('pl.prevCh'), () => this.zap(-1), 'p-btn live-only'),
+            btn('down', t('pl.nextCh'), () => this.zap(1), 'p-btn live-only'),
             this.muteBtn, this.vol),
           h('div', { class: 'p-group' },
-            btn('list', 'Lista canali', () => this.toggleDrawer(), 'p-btn live-only'),
-            btn('tracks', 'Audio, sottotitoli, qualità', () => this.toggleMenu()),
+            btn('list', t('pl.chList'), () => this.toggleDrawer(), 'p-btn live-only'),
+            btn('tracks', t('pl.tracks'), () => this.toggleMenu()),
             btn('pip', 'Picture-in-Picture', () => this.pip()),
             this.fsBtn),
         ),
@@ -180,7 +181,7 @@ class PlayerView {
     });
     const tick = () => {
       const c = root.querySelector('.p-clock');
-      if (c) c.textContent = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+      if (c) c.textContent = new Date().toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
     };
     tick();
     setInterval(tick, 15000);
@@ -200,7 +201,7 @@ class PlayerView {
       clear(this.muteBtn);
       this.muteBtn.appendChild(icon(v.muted || v.volume === 0 ? 'mute' : 'vol', 22));
     });
-    v.addEventListener('waiting', () => this.setStatus('Buffering…', true));
+    v.addEventListener('waiting', () => this.setStatus(t('pl.buffering'), true));
     v.addEventListener('playing', () => {
       this.setStatus('');
       this.retries = 0;
@@ -211,7 +212,7 @@ class PlayerView {
       this.req.startAt = undefined;
     });
     v.addEventListener('ended', () => this.onEnded());
-    v.addEventListener('error', () => this.onFatal('Errore di riproduzione del media'));
+    v.addEventListener('error', () => this.onFatal(t('pl.mediaError')));
     document.addEventListener('fullscreenchange', () => {
       clear(this.fsBtn);
       this.fsBtn.appendChild(icon(document.fullscreenElement ? 'exitfull' : 'full', 22));
@@ -249,7 +250,7 @@ class PlayerView {
 
   async start(url: string, seq: number) {
     this.teardown();
-    this.setStatus('Connessione…', true);
+    this.setStatus(t('pl.connecting'), true);
     let path: string;
     try {
       path = await openStream(url, active()?.ua);
@@ -271,20 +272,20 @@ class PlayerView {
         if (d.type === Hls.ErrorTypes.MEDIA_ERROR && this.retries < 2) {
           this.retries++;
           hls.recoverMediaError();
-        } else this.onFatal(d.response?.code ? `Stream non disponibile (${d.response.code})` : 'Stream HLS interrotto');
+        } else this.onFatal(d.response?.code ? t('pl.unavailable', { c: d.response.code }) : t('pl.hlsBroken'));
       });
       hls.on(Hls.Events.MANIFEST_PARSED, () => v.play().catch(() => this.needsTap()));
       hls.loadSource(path);
       hls.attachMedia(v);
       this.engine = {
         destroy: () => hls.destroy(),
-        audio: () => hls.audioTracks.map((t, i) => ({ id: i, label: t.name || t.lang || `Traccia ${i + 1}`, active: i === hls.audioTrack })),
+        audio: () => hls.audioTracks.map((tr, i) => ({ id: i, label: tr.name || tr.lang || t('pl.track', { n: i + 1 }), active: i === hls.audioTrack })),
         setAudio: (i) => (hls.audioTrack = i),
-        subs: () => [{ id: -1, label: 'Disattivati', active: hls.subtitleTrack === -1 },
-          ...hls.subtitleTracks.map((t, i) => ({ id: i, label: t.name || t.lang || `Sottotitoli ${i + 1}`, active: i === hls.subtitleTrack }))],
+        subs: () => [{ id: -1, label: t('pl.subsOff'), active: hls.subtitleTrack === -1 },
+          ...hls.subtitleTracks.map((tr, i) => ({ id: i, label: tr.name || tr.lang || t('pl.subsN', { n: i + 1 }), active: i === hls.subtitleTrack }))],
         setSub: (i) => (hls.subtitleTrack = i),
-        levels: () => [{ id: -1, label: 'Automatica', active: hls.autoLevelEnabled },
-          ...hls.levels.map((l, i) => ({ id: i, label: l.height ? `${l.height}p${l.bitrate ? ` · ${(l.bitrate / 1e6).toFixed(1)} Mbps` : ''}` : `Livello ${i + 1}`, active: !hls.autoLevelEnabled && i === hls.currentLevel }))],
+        levels: () => [{ id: -1, label: t('pl.auto'), active: hls.autoLevelEnabled },
+          ...hls.levels.map((l, i) => ({ id: i, label: l.height ? `${l.height}p${l.bitrate ? ` · ${(l.bitrate / 1e6).toFixed(1)} Mbps` : ''}` : t('pl.level', { n: i + 1 }), active: !hls.autoLevelEnabled && i === hls.currentLevel }))],
         setLevel: (i) => (hls.currentLevel = i),
       };
     } else if (isTs && mpegts.isSupported()) {
@@ -292,7 +293,7 @@ class PlayerView {
         { type: 'mpegts', isLive: this.req.live, url: path },
         { enableWorker: true, liveBufferLatencyChasing: true, liveBufferLatencyMaxLatency: 8, liveBufferLatencyMinRemain: 2, lazyLoad: false, autoCleanupSourceBuffer: true },
       );
-      p.on(mpegts.Events.ERROR, (_t: string, detail: string) => this.onFatal(`Stream interrotto (${detail})`));
+      p.on(mpegts.Events.ERROR, (_t: string, detail: string) => this.onFatal(t('pl.broken', { d: detail })));
       p.attachMediaElement(v);
       p.load();
       Promise.resolve(p.play()).catch(() => this.needsTap());
@@ -318,21 +319,21 @@ class PlayerView {
         },
         audio: () => {
           const at = (v as HTMLVideoElement & { audioTracks?: { length: number; [i: number]: { label: string; language: string; enabled: boolean } } }).audioTracks;
-          return at ? Array.from({ length: at.length }, (_, i) => ({ id: i, label: at[i].label || at[i].language || `Traccia ${i + 1}`, active: at[i].enabled })) : [];
+          return at ? Array.from({ length: at.length }, (_, i) => ({ id: i, label: at[i].label || at[i].language || t('pl.track', { n: i + 1 }), active: at[i].enabled })) : [];
         },
         setAudio: (i) => {
           const at = (v as HTMLVideoElement & { audioTracks?: { length: number; [i: number]: { enabled: boolean } } }).audioTracks;
           if (at) for (let k = 0; k < at.length; k++) at[k].enabled = k === i;
         },
-        subs: () => [{ id: -1, label: 'Disattivati', active: ![...v.textTracks].some((t) => t.mode === 'showing') },
-          ...[...v.textTracks].map((t, i) => ({ id: i, label: t.label || t.language || `Sottotitoli ${i + 1}`, active: t.mode === 'showing' }))],
-        setSub: (i) => [...v.textTracks].forEach((t, k) => (t.mode = k === i ? 'showing' : 'disabled')),
+        subs: () => [{ id: -1, label: t('pl.subsOff'), active: ![...v.textTracks].some((tr) => tr.mode === 'showing') },
+          ...[...v.textTracks].map((tr, i) => ({ id: i, label: tr.label || tr.language || t('pl.subsN', { n: i + 1 }), active: tr.mode === 'showing' }))],
+        setSub: (i) => [...v.textTracks].forEach((tr, k) => (tr.mode = k === i ? 'showing' : 'disabled')),
       };
     }
   }
 
   needsTap() {
-    this.setStatus('Premi play per avviare');
+    this.setStatus(t('pl.tap'));
     this.root.classList.add('paused');
   }
 
@@ -350,7 +351,7 @@ class PlayerView {
       this.fmtFallback = true;
       const alt = src.format === 'ts' ? 'm3u8' : 'ts';
       this.req.url = channelUrl(this.req.channel, alt);
-      this.setStatus('Provo un formato alternativo…', true);
+      this.setStatus(t('pl.altFormat'), true);
       this.start(this.req.url, this.loadSeq);
       return;
     }
@@ -358,12 +359,12 @@ class PlayerView {
       const wait = Math.min(1000 * 2 ** this.retries, 15000);
       this.retries++;
       if (!this.req.live && Number.isFinite(this.video.currentTime) && this.video.currentTime > 5) this.req.startAt = this.video.currentTime;
-      this.setStatus(`${msg}. Riconnessione tra ${Math.round(wait / 1000)}s… (${this.retries}/${MAX_RETRY})`, true);
+      this.setStatus(t('pl.retry', { m: msg, s: Math.round(wait / 1000), r: this.retries, x: MAX_RETRY }), true);
       const seq = this.loadSeq;
       this.retryTimer = setTimeout(() => seq === this.loadSeq && this.start(this.req.url, seq), wait);
     } else {
       this.teardown();
-      this.setStatus(`${msg}. Impossibile riprodurre questo contenuto.`);
+      this.setStatus(t('pl.cannot', { m: msg }));
     }
   }
 
@@ -406,7 +407,7 @@ class PlayerView {
       this.epgLine.append(
         h('div', { class: 'epg-now' }, h('b', null, `${clock(now.s)}–${clock(now.e)}`), ' ', now.t),
         bar,
-        next ? h('div', { class: 'epg-next' }, 'Dopo: ', h('b', null, clock(next.s)), ' ', next.t) : '',
+        next ? h('div', { class: 'epg-next' }, t('pl.next'), h('b', null, clock(next.s)), ' ', next.t) : '',
       );
     }
   }
@@ -429,7 +430,7 @@ class PlayerView {
       const i = eps.findIndex((e) => e.id === this.req.episode?.id);
       const nx = eps[i + 1];
       if (nx) {
-        toast(`Prossimo episodio: S${nx.season} E${nx.episode}`);
+        toast(t('pl.nextEp', { s: nx.season, e: nx.episode }));
         document.dispatchEvent(new CustomEvent('orbita:play-episode', { detail: { series: this.req.series, episode: nx } }));
       }
     }
@@ -457,7 +458,7 @@ class PlayerView {
       if (document.pictureInPictureElement) await document.exitPictureInPicture();
       else await this.video.requestPictureInPicture();
     } catch {
-      toast('Picture-in-Picture non disponibile per questo stream', 'error');
+      toast(t('pl.noPip'), 'error');
     }
   }
   zap(dir: number) {
@@ -490,16 +491,16 @@ class PlayerView {
     const section = (name: string, items: Track[] | undefined, set?: (i: number) => void) => {
       if (!items?.length || !set) return null;
       return h('div', { class: 'p-menu-sec' }, h('h4', null, name),
-        items.map((t) => h('button', { class: 'p-opt' + (t.active ? ' on' : ''), on: { click: () => (set(t.id), (this.menu.hidden = true), toast(`${name}: ${t.label}`, 'ok')) } }, t.label)));
+        items.map((tr) => h('button', { class: 'p-opt' + (tr.active ? ' on' : ''), on: { click: () => (set(tr.id), (this.menu.hidden = true), toast(`${name}: ${tr.label}`, 'ok')) } }, tr.label)));
     };
-    const speeds = this.req.live ? null : h('div', { class: 'p-menu-sec' }, h('h4', null, 'Velocità'),
+    const speeds = this.req.live ? null : h('div', { class: 'p-menu-sec' }, h('h4', null, t('pl.speed')),
       [0.75, 1, 1.25, 1.5, 2].map((r) => h('button', { class: 'p-opt' + (this.video.playbackRate === r ? ' on' : ''), on: { click: () => ((this.video.playbackRate = r), (this.menu.hidden = true)) } }, `${r}×`)));
-    const fit = h('div', { class: 'p-menu-sec' }, h('h4', null, 'Formato'),
-      [['contain', 'Adatta'], ['cover', 'Riempi'], ['fill', 'Allunga']].map(([k, l]) =>
+    const fit = h('div', { class: 'p-menu-sec' }, h('h4', null, t('pl.format')),
+      [['contain', t('pl.fit')], ['cover', t('pl.fill')], ['fill', t('pl.stretch')]].map(([k, l]) =>
         h('button', { class: 'p-opt' + ((this.video.style.objectFit || 'contain') === k ? ' on' : ''), on: { click: () => ((this.video.style.objectFit = k), (this.menu.hidden = true)) } }, l)));
-    const parts = [section('Audio', e?.audio?.(), e?.setAudio), section('Sottotitoli', e?.subs?.(), e?.setSub), section('Qualità', e?.levels?.(), e?.setLevel), speeds, fit].filter(Boolean);
-    const info = h('div', { class: 'p-menu-sec tech' }, h('h4', null, 'Info tecniche'),
-      h('p', null, this.video.videoWidth ? `${this.video.videoWidth}×${this.video.videoHeight}` : 'Risoluzione n/d'));
+    const parts = [section(t('pl.audio'), e?.audio?.(), e?.setAudio), section(t('pl.subs'), e?.subs?.(), e?.setSub), section(t('pl.quality'), e?.levels?.(), e?.setLevel), speeds, fit].filter(Boolean);
+    const info = h('div', { class: 'p-menu-sec tech' }, h('h4', null, t('pl.tech')),
+      h('p', null, this.video.videoWidth ? `${this.video.videoWidth}×${this.video.videoHeight}` : t('pl.noRes')));
     this.menu.append(...(parts as HTMLElement[]), info);
     this.menu.hidden = false;
     this.menu.querySelector<HTMLElement>('button')?.focus();
@@ -516,7 +517,7 @@ class PlayerView {
       items.slice(0, 1500).map((c) =>
         h('button', { class: 'p-ch' + (c.id === cur?.id ? ' on' : ''), on: { click: () => this.load(channelRequest(c)) } },
           thumb(img(c.logo), c.name, 'ch-logo sm'), h('span', null, c.name))));
-    this.drawer.append(h('h4', null, group || 'Canali'), list);
+    this.drawer.append(h('h4', null, group || t('common.channels')), list);
     this.drawer.hidden = false;
     const on = list.querySelector<HTMLElement>('.on');
     on?.scrollIntoView({ block: 'center' });

@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 // Persistenza locale in IndexedDB. Fonti (credenziali) e librerie (URL con credenziali) sono
 // cifrate AES-GCM 256 con una chiave NON estraibile generata dal browser: nemmeno il codice
 // della pagina può leggerne i byte, e i dati su disco non sono in chiaro.
@@ -44,7 +45,7 @@ export const kv = {
 
 let keyp: Promise<CryptoKey> | null = null;
 function masterKey(): Promise<CryptoKey> {
-  if (!crypto?.subtle) return Promise.reject(new Error('WebCrypto non disponibile: impossibile proteggere le credenziali.'));
+  if (!crypto?.subtle) return Promise.reject(new Error(t('err.noCrypto')));
   return (keyp ||= (async () => {
     const existing = await tx<CryptoKey | undefined>('keys', 'readonly', (s) => s.get('master') as IDBRequest<CryptoKey | undefined>);
     if (existing) return existing;

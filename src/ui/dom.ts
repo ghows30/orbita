@@ -1,5 +1,6 @@
 // Costruzione DOM sicura: i dati dei provider entrano SOLO come textContent o attributi
 // controllati, mai come HTML. Così un titolo malevolo nella playlist non può iniettare script.
+import { t } from '../i18n';
 
 type Child = Node | string | number | null | undefined | false | Child[];
 type Props = Record<string, unknown> & { class?: string; on?: Record<string, EventListener> };
@@ -141,7 +142,7 @@ export function modal(content: HTMLElement, opts: { wide?: boolean; onClose?: ()
     }
   };
   const box = h('div', { class: 'modal' + (opts.wide ? ' wide' : ''), role: 'dialog', 'aria-modal': 'true' },
-    h('button', { class: 'icon-btn modal-x', 'aria-label': 'Chiudi', on: { click: close } }, icon('close')),
+    h('button', { class: 'icon-btn modal-x', 'aria-label': t('common.close'), on: { click: close } }, icon('close')),
     content);
   const wrap = h('div', { class: 'modal-wrap', on: { mousedown: (e) => e.target === wrap && close() } }, box);
   document.body.appendChild(wrap);
@@ -151,7 +152,7 @@ export function modal(content: HTMLElement, opts: { wide?: boolean; onClose?: ()
 }
 
 /** Conferma in stile ORBITA (al posto di confirm(), brutto su TV). "Annulla" ha il focus: un OK distratto non cancella nulla. */
-export function askConfirm(message: string, okLabel = 'Elimina'): Promise<boolean> {
+export function askConfirm(message: string, okLabel = t('common.delete')): Promise<boolean> {
   return new Promise((resolve) => {
     let done = false;
     const finish = (v: boolean) => {
@@ -159,8 +160,8 @@ export function askConfirm(message: string, okLabel = 'Elimina'): Promise<boolea
       close();
       resolve(v);
     };
-    const cancel = h('button', { class: 'btn ghost', on: { click: () => finish(false) } }, 'Annulla');
-    const box = h('div', { class: 'stack' }, h('h3', null, 'Sei sicuro?'), h('p', { class: 'muted' }, message),
+    const cancel = h('button', { class: 'btn ghost', on: { click: () => finish(false) } }, t('common.cancel'));
+    const box = h('div', { class: 'stack' }, h('h3', null, t('common.sure')), h('p', { class: 'muted' }, message),
       h('div', { class: 'row gap' }, cancel, h('button', { class: 'btn danger', on: { click: () => finish(true) } }, okLabel)));
     const close = modal(box, { onClose: () => !done && resolve(false) });
     requestAnimationFrame(() => cancel.focus());
@@ -173,10 +174,10 @@ export function askPin(title: string): Promise<string | null> {
     let done = false;
     const input = h('input', { type: 'password', inputMode: 'numeric', autocomplete: 'off', maxLength: 8, class: 'pin-input', 'aria-label': 'PIN' });
     const form = h('form', { class: 'stack' }, h('h3', null, title), input,
-      h('button', { class: 'btn primary', type: 'submit' }, 'Conferma'));
+      h('button', { class: 'btn primary', type: 'submit' }, t('common.confirm')));
     form.addEventListener('submit', (e) => {
       e.preventDefault();
-      if (!/^\d{4,8}$/.test(input.value)) return toast('Il PIN deve avere da 4 a 8 cifre', 'error');
+      if (!/^\d{4,8}$/.test(input.value)) return toast(t('pin.invalid'), 'error');
       done = true;
       close();
       resolve(input.value);

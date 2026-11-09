@@ -1,3 +1,4 @@
+import { t, translateRemote } from '../i18n';
 // Chiamate al server locale ORBITA. Gli URL dei provider (con credenziali) viaggiano solo
 // nel corpo delle POST e tornano come percorsi opachi /p/<token>.
 
@@ -18,6 +19,8 @@ export interface NativeBridge {
   remoteStart?(): string;
   remoteStop?(): void;
   remoteResult?(ok: boolean, msg: string): void;
+  /** Lingua scelta nell'interfaccia (messaggi nativi e pagina per lo smartphone). Facoltativo: APK vecchi non lo hanno. */
+  setLang?(lang: string): void;
 }
 declare global {
   interface Window {
@@ -35,7 +38,7 @@ async function post(path: string, body: unknown, signal?: AbortSignal): Promise<
     if (native) {
       // nell'app Android la richiesta viene registrata nel ponte e poi eseguita dal codice nativo
       const id = native.prepare(path, JSON.stringify(body));
-      if (!id) throw new ApiError('Richiesta non valida');
+      if (!id) throw new ApiError(t('err.badRequest'));
       r = await fetch(`/__native/${id}`, { cache: 'no-store', signal });
     } else r = await fetch(path, {
       method: 'POST',
@@ -47,13 +50,13 @@ async function post(path: string, body: unknown, signal?: AbortSignal): Promise<
     });
   } catch (e) {
     if ((e as Error).name === 'AbortError' || e instanceof ApiError) throw e;
-    throw new ApiError(native ? 'Errore di rete. Controlla la connessione.' : 'Server ORBITA non raggiungibile. È avviato?');
+    throw new ApiError(native ? t('err.networkNative') : t('err.serverDown'));
   }
   if (!r.ok) {
-    let msg = `Errore ${r.status}`;
+    let msg = t('err.http', { c: r.status });
     try {
       const j = await r.json();
-      if (j?.error) msg = j.error;
+      if (j?.error) msg = translateRemote(String(j.error));
     } catch {
       /* corpo non JSON */
     }
@@ -67,11 +70,11 @@ export async function fetchText(url: string, ua?: string, signal?: AbortSignal):
 }
 
 export async function fetchJson<T>(url: string, ua?: string, signal?: AbortSignal): Promise<T> {
-  const t = await fetchText(url, ua, signal);
+  const body = await fetchText(url, ua, signal);
   try {
-    return JSON.parse(t) as T;
+    return JSON.parse(body) as T;
   } catch {
-    throw new ApiError('Risposta del provider non valida (non è JSON). Controlla server e credenziali.');
+    throw new ApiError(t('err.notJson'));
   }
 }
 

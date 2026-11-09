@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { fetchJson } from './api';
 import type { Channel, EpgItem, Episode, Library, Movie, Series, XtreamSource } from './types';
 import { cleanTitle, decodeEntities, isAdult } from './util';
@@ -69,24 +70,24 @@ const safeImg = (u?: string) => (u && /^https?:\/\//i.test(u) ? u : undefined);
 
 export async function login(s: XtreamSource, signal?: AbortSignal): Promise<Auth> {
   const a = await fetchJson<Auth>(api(s), s.ua, signal);
-  if (!a?.user_info || Number(a.user_info.auth) !== 1) throw new Error(a?.user_info?.message || 'Login Xtream rifiutato: controlla utente e password.');
-  if (a.user_info.status && a.user_info.status !== 'Active') throw new Error(`Abbonamento non attivo (${a.user_info.status}).`);
+  if (!a?.user_info || Number(a.user_info.auth) !== 1) throw new Error(a?.user_info?.message || t('err.login'));
+  if (a.user_info.status && a.user_info.status !== 'Active') throw new Error(t('err.inactive', { s: a.user_info.status }));
   return a;
 }
 
 export async function loadXtream(s: XtreamSource, onStep?: (msg: string) => void, signal?: AbortSignal): Promise<Library> {
-  onStep?.('Accesso al server…');
+  onStep?.(t('step.login'));
   const auth = await login(s, signal);
-  onStep?.('Scarico categorie e canali…');
+  onStep?.(t('step.download'));
   const get = <T>(action: string) => fetchJson<T>(api(s, action), s.ua, signal).catch(() => [] as unknown as T);
   const [lc, vc, sc, ls, vs, ss] = await Promise.all([
     get<Cat[]>('get_live_categories'), get<Cat[]>('get_vod_categories'), get<Cat[]>('get_series_categories'),
     get<XLive[]>('get_live_streams'), get<XVod[]>('get_vod_streams'), get<XSeries[]>('get_series'),
   ]);
-  onStep?.('Organizzo la libreria…');
+  onStep?.(t('step.organize'));
   const names = (cats: Cat[]) => {
     const m = new Map<string, string>();
-    if (Array.isArray(cats)) for (const c of cats) m.set(String(c.category_id), decodeEntities(c.category_name || 'Altro'));
+    if (Array.isArray(cats)) for (const c of cats) m.set(String(c.category_id), decodeEntities(c.category_name || t('common.other')));
     return m;
   };
   const lN = names(lc), vN = names(vc), sN = names(sc);
@@ -100,7 +101,7 @@ export async function loadXtream(s: XtreamSource, onStep?: (msg: string) => void
     .slice()
     .sort((a, b) => lo(a.category_id) - lo(b.category_id))
     .map((x) => {
-      const group = lN.get(String(x.category_id)) || 'Altro';
+      const group = lN.get(String(x.category_id)) || t('common.other');
       const name = decodeEntities(String(x.name || ''));
       return {
         id: 'x' + x.stream_id, xid: x.stream_id, name, group, logo: safeImg(x.stream_icon),
@@ -113,7 +114,7 @@ export async function loadXtream(s: XtreamSource, onStep?: (msg: string) => void
     .slice()
     .sort((a, b) => vo(a.category_id) - vo(b.category_id))
     .map((x) => {
-      const group = vN.get(String(x.category_id)) || 'Altro';
+      const group = vN.get(String(x.category_id)) || t('common.other');
       return {
         id: 'v' + x.stream_id, xid: x.stream_id, name: cleanTitle(String(x.name || '')), group, logo: safeImg(x.stream_icon),
         ext: /^[a-z0-9]{2,5}$/i.test(x.container_extension || '') ? x.container_extension : 'mp4',
@@ -124,7 +125,7 @@ export async function loadXtream(s: XtreamSource, onStep?: (msg: string) => void
     .slice()
     .sort((a, b) => so(a.category_id) - so(b.category_id))
     .map((x) => {
-      const group = sN.get(String(x.category_id)) || 'Altro';
+      const group = sN.get(String(x.category_id)) || t('common.other');
       return {
         id: 'r' + x.series_id, xid: x.series_id, name: cleanTitle(String(x.name || '')), group, logo: safeImg(x.cover),
         rating: num(x.rating), added: num(x.last_modified), year: num(x.year) || yearOf(x.releaseDate, x.name), adult: isAdult(group, x.name) || undefined,

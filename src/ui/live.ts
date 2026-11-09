@@ -5,9 +5,12 @@ import { timeshiftUrl } from '../core/xtream';
 import { active, epgFor, hidden, isFav, loadGuide, nowNext, onChange, state, toggleFav } from '../state';
 import { clear, h, icon, thumb, toast } from './dom';
 import { channelRequest, play } from './player';
+import { t } from '../i18n';
 
-const FAV = '★ Preferiti';
-const ALL = 'Tutti i canali';
+// chiavi interne (salvate in localStorage), indipendenti dalla lingua
+const FAV = '\u0000fav';
+const ALL = '\u0000all';
+const groupLabel = (g: string) => (g === FAV ? t('live.favorites') : g === ALL ? t('live.all') : g);
 
 export function liveView(): HTMLElement {
   const lib = state.lib!;
@@ -18,9 +21,9 @@ export function liveView(): HTMLElement {
   let query = '';
   let selected: Channel | undefined;
 
-  const catList = h('nav', { class: 'cat-list', 'aria-label': 'Categorie' });
+  const catList = h('nav', { class: 'cat-list', 'aria-label': t('live.categories') });
   const chList = h('div', { class: 'ch-list', role: 'listbox' });
-  const filter = h('input', { class: 'search-input', type: 'search', placeholder: 'Filtra canali…', 'aria-label': 'Filtra canali' });
+  const filter = h('input', { class: 'search-input', type: 'search', placeholder: t('live.filter'), 'aria-label': t('live.filter') });
   const detail = h('section', { class: 'ch-detail' });
   const count = h('span', { class: 'count' });
 
@@ -38,7 +41,7 @@ export function liveView(): HTMLElement {
     for (const g of groups) {
       const n = g === FAV ? channels.filter((c) => isFav('live', c.id)).length : g === ALL ? channels.length : 0;
       catList.appendChild(h('button', { class: 'cat' + (g === group ? ' on' : ''), on: { click: () => { group = g; localStorage.setItem('orbita.liveGroup', g); renderCats(); renderList(); } } },
-        h('span', null, g), n ? h('em', null, String(n)) : null));
+        h('span', null, groupLabel(g)), n ? h('em', null, String(n)) : null));
     }
   };
 
@@ -71,7 +74,7 @@ export function liveView(): HTMLElement {
       h('div', { class: 'ch-text' }, h('div', { class: 'ch-name' }, c.name),
         now ? h('div', { class: 'ch-now' }, now.t) : h('div', { class: 'ch-now dim' }, c.group)),
       isFav('live', c.id) ? icon('star', 14, 'fav-dot') : null,
-      c.archive ? h('span', { class: 'tag', title: `Archivio ${c.archive} giorni` }, 'REC') : null,
+      c.archive ? h('span', { class: 'tag', title: t('live.archiveDays', { n: c.archive }) }, 'REC') : null,
       now ? bar : null);
     return r;
   };
@@ -87,9 +90,9 @@ export function liveView(): HTMLElement {
     rendered = 0;
     clear(chList);
     chList.appendChild(sentinel);
-    count.textContent = `${current.length} canali`;
+    count.textContent = t('live.count', { n: current.length });
     if (!current.length) {
-      chList.prepend(h('div', { class: 'empty' }, group === FAV ? 'Nessun preferito. Seleziona un canale e premi ★.' : 'Nessun canale trovato.'));
+      chList.prepend(h('div', { class: 'empty' }, group === FAV ? t('live.noFav') : t('live.none')));
       return;
     }
     more();
@@ -114,43 +117,43 @@ export function liveView(): HTMLElement {
   function renderDetail(c: Channel, items: EpgItem[] | null) {
     clear(detail);
     const fav = isFav('live', c.id);
-    const t = Date.now() / 1000;
+    const nowS = Date.now() / 1000;
     const src = active();
     const canArchive = !!c.archive && src?.type === 'xtream' && !!c.xid;
     const hero = h('div', { class: 'ch-hero' },
       thumb(img(c.logo), c.name, 'ch-logo xl'),
       h('div', null, h('h2', null, c.name), h('div', { class: 'muted' }, c.group)));
     const actions = h('div', { class: 'row gap' },
-      h('button', { class: 'btn primary', on: { click: () => play(channelRequest(c), current) } }, icon('play', 18), 'Guarda'),
+      h('button', { class: 'btn primary', on: { click: () => play(channelRequest(c), current) } }, icon('play', 18), t('common.watch')),
       h('button', { class: 'btn ghost', 'aria-pressed': String(fav), on: { click: async () => { await toggleFav('live', c.id); renderDetail(c, items); renderCats(); const r = chList.querySelector(`[data-id="${CSS.escape(c.id)}"]`); r?.replaceWith(row(c)); } } },
-        icon('star', 18), fav ? 'Nei preferiti' : 'Preferito'));
+        icon('star', 18), fav ? t('live.inFav') : t('live.fav')));
     const guide = h('div', { class: 'epg-list' });
     if (items === null) guide.appendChild(h('div', { class: 'skeleton-lines' }, h('i'), h('i'), h('i')));
-    else if (!items.length) guide.appendChild(h('div', { class: 'empty small' }, state.epgStatus === 'loading' ? 'Carico la guida TV…' : 'Guida TV non disponibile per questo canale.'));
+    else if (!items.length) guide.appendChild(h('div', { class: 'empty small' }, state.epgStatus === 'loading' ? t('live.loadingGuide') : t('live.noGuide')));
     else {
-      const startIdx = Math.max(0, items.findIndex((x) => x.e > t) - (canArchive ? 6 : 0));
+      const startIdx = Math.max(0, items.findIndex((x) => x.e > nowS) - (canArchive ? 6 : 0));
       for (const p of items.slice(startIdx, startIdx + 30)) {
-        const isNow = p.s <= t && p.e > t;
-        const past = p.e <= t;
-        const archivable = canArchive && past && p.s > t - c.archive! * 86400;
-        const pct = isNow ? ((t - p.s) / (p.e - p.s)) * 100 : 0;
+        const isNow = p.s <= nowS && p.e > nowS;
+        const past = p.e <= nowS;
+        const archivable = canArchive && past && p.s > nowS - c.archive! * 86400;
+        const pct = isNow ? ((nowS - p.s) / (p.e - p.s)) * 100 : 0;
         const bar = isNow ? h('div', { class: 'mini-bar' }, h('i')) : null;
         if (bar) (bar.firstChild as HTMLElement).style.width = pct + '%';
         guide.appendChild(h('div', { class: 'epg-item' + (isNow ? ' now' : '') + (past ? ' past' : '') },
           h('div', { class: 'epg-time' }, clock(p.s)),
-          h('div', { class: 'epg-body' }, h('div', { class: 'epg-title' }, p.t || 'Senza titolo'), p.d ? h('div', { class: 'epg-desc' }, p.d) : null, bar),
-          archivable ? h('button', { class: 'btn tiny', title: 'Guarda dall\'archivio', on: { click: () => playArchive(c, p) } }, icon('rew', 14), 'Rivedi') : null,
-          isNow && canArchive ? h('button', { class: 'btn tiny', title: 'Dall\'inizio', on: { click: () => playArchive(c, p) } }, icon('rew', 14), 'Dall\'inizio') : null));
+          h('div', { class: 'epg-body' }, h('div', { class: 'epg-title' }, p.t || t('live.untitled')), p.d ? h('div', { class: 'epg-desc' }, p.d) : null, bar),
+          archivable ? h('button', { class: 'btn tiny', title: t('live.fromArchive'), on: { click: () => playArchive(c, p) } }, icon('rew', 14), t('live.replay')) : null,
+          isNow && canArchive ? h('button', { class: 'btn tiny', title: t('lib.fromStart'), on: { click: () => playArchive(c, p) } }, icon('rew', 14), t('lib.fromStart')) : null));
       }
     }
-    detail.append(hero, actions, h('h3', { class: 'sec-title' }, 'Guida TV'), guide);
+    detail.append(hero, actions, h('h3', { class: 'sec-title' }, t('live.guide')), guide);
   }
 
   function playArchive(c: Channel, p: EpgItem) {
     const src = active() as XtreamSource;
     const url = timeshiftUrl(src, c.xid!, p.s, Math.min(p.e, Date.now() / 1000 + 60), state.lib?.tz);
     play({ kind: 'catchup', live: false, title: p.t || c.name, subtitle: `${c.name} · ${clock(p.s)}`, logo: c.logo, url, channel: c });
-    toast('Riproduzione dall\'archivio', 'ok');
+    toast(t('live.archivePlaying'), 'ok');
   }
 
   filter.addEventListener('input', () => {
@@ -159,7 +162,7 @@ export function liveView(): HTMLElement {
   });
 
   const view = h('div', { class: 'live' },
-    h('aside', { class: 'live-cats' }, h('h3', { class: 'pane-title' }, 'Categorie'), catList),
+    h('aside', { class: 'live-cats' }, h('h3', { class: 'pane-title' }, t('live.categories')), catList),
     h('section', { class: 'live-chs' }, h('div', { class: 'pane-head' }, filter, count), chList),
     detail);
 
@@ -193,6 +196,8 @@ export function liveView(): HTMLElement {
       if (selected) select(selected, false);
     }
   });
-  loadGuide();
+  // dopo l'inserimento nella pagina: loadGuide notifica subito ("loading") e con la vista
+  // non ancora collegata il listener qui sopra si staccherebbe, lasciando la guida in caricamento
+  queueMicrotask(() => loadGuide());
   return view;
 }
