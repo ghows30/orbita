@@ -1,27 +1,83 @@
 import { img } from '../core/api';
-import type { Channel, Episode, Movie, Series, XtreamSource } from '../core/types';
+import type { Episode, Movie, Series, XtreamSource } from '../core/types';
 import { debounce, fmtTime, fold } from '../core/util';
 import { seriesInfo, vodInfo } from '../core/xtream';
+import { bestRating, cachedMeta, getMeta, hasMetaKeys, type Meta, type MetaKind } from '../core/meta';
 import { active, episodeStreamUrl, hidden, isFav, movieStreamUrl, progressOf, state, toggleFav } from '../state';
 import { clear, h, icon, modal, thumb, toast } from './dom';
 import { locale, num, t } from '../i18n';
 import { channelRequest, play } from './player';
 
-type Item = Movie | Series;
-const isSeries = (x: Item): x is Series => x.id.startsWith('r') || x.id.startsWith('s');
+export type Item = Movie | Series;
+export const isSeries = (x: Item): x is Series => x.id.startsWith('r') || x.id.startsWith('s');
+export const kindOf = (x: Item): MetaKind => (isSeries(x) ? 'series' : 'movie');
+
+/* ---------------- voti ---------------- */
+/** Piccolo badge sulla copertina: il voto migliore disponibile e la sua fonte. */
+export function ratingBadge(x: Item, m?: Meta): HTMLElement | null {
+  const r = bestRating(x, m);
+  if (!r) return null;
+  return h('span', { class: 'rating r-' + r.src, title: r.src === 'provider' ? '' : r.src.toUpperCase() },
+    r.src === 'imdb' ? h('b', null, 'IMDb') : r.src === 'tmdb' ? h('b', null, 'TMDB') : icon('star', 11), r.value.toFixed(1));
+}
+
+/** Etichette dei voti per vetrina e schede: IMDb, Rotten Tomatoes, TMDB, provider. */
+export function ratingChips(x: Item, m?: Meta): HTMLElement | null {
+  const chips: HTMLElement[] = [];
+  if (m?.imdb) chips.push(h('span', { class: 'rchip imdb' }, h('b', null, 'IMDb'), m.imdb.toFixed(1)));
+  if (m?.rt) chips.push(h('span', { class: 'rchip rt' + (m.rt >= 60 ? ' fresh' : ' rotten') }, h('b', null, 'Rotten Tomatoes'), `${m.rt}%`));
+  if (m?.tmdb) chips.push(h('span', { class: 'rchip tmdb' }, h('b', null, 'TMDB'), m.tmdb.toFixed(1)));
+  if (!chips.length && x.rating) chips.push(h('span', { class: 'rchip' }, icon('star', 13), (x.rating > 10 ? x.rating / 10 : x.rating).toFixed(1)));
+  return chips.length ? h('div', { class: 'rchips' }, chips) : null;
+}
+
+/** Riga "anno · durata · stagioni · generi". */
+export function metaLine(x: Item, m?: Meta): string {
+  const run = m?.runtime ? (m.runtime >= 60 ? `${Math.floor(m.runtime / 60)}h ${m.runtime % 60}m` : `${m.runtime}m`) : '';
+  return [m?.year || x.year, isSeries(x) ? '' : run, m?.seasons ? (m.seasons === 1 ? t('lib.seasons1') : t('lib.seasonsN', { n: m.seasons })) : '', (m?.genres || []).join(', ') || x.group]
+    .filter(Boolean).join('  ·  ');
+}
+
+// arricchisce le card solo quando entrano nello schermo: niente raffiche di richieste su cataloghi enormi
+const enrichIo = typeof IntersectionObserver !== 'undefined'
+  ? new IntersectionObserver((es) => {
+    for (const e of es) {
+      if (!e.isIntersecting) continue;
+      enrichIo!.unobserve(e.target);
+      (e.target as HTMLElement & { enrich?: () => void }).enrich?.();
+    }
+  }, { rootMargin: '400px' })
+  : null;
 
 /* ---------------- card e griglie ---------------- */
-function poster(x: Item, onOpen: () => void): HTMLElement {
-  const kind = isSeries(x) ? 'series' : 'movie';
+export function poster(x: Item, onOpen: () => void): HTMLElement {
+  const kind = kindOf(x);
   const p = !isSeries(x) ? progressOf(`movie:${x.id}`) : undefined;
   const bar = p && p.dur ? h('div', { class: 'card-progress' }, h('i')) : null;
   if (bar && p) (bar.firstChild as HTMLElement).style.width = `${(p.pos / p.dur) * 100}%`;
-  return h('button', { class: 'card', on: { click: onOpen }, title: x.name },
-    h('div', { class: 'card-art' }, thumb(img(x.logo), x.name, 'poster'),
-      x.rating ? h('span', { class: 'rating' }, icon('star', 11), x.rating.toFixed(1)) : null,
-      isFav(kind, x.id) ? h('span', { class: 'fav-badge' }, icon('heart', 13)) : null, bar),
-    h('div', { class: 'card-title' }, x.name),
+  const m = cachedMeta(kind, x);
+  let art = thumb(img(x.logo || m?.poster), x.name, 'poster');
+  let badge = ratingBadge(x, m);
+  const box = h('div', { class: 'card-art' }, art, badge, isFav(kind, x.id) ? h('span', { class: 'fav-badge' }, icon('heart', 13)) : null, bar);
+  const card = h('button', { class: 'card', on: { click: onOpen }, title: x.name },
+    box, h('div', { class: 'card-title' }, x.name),
     h('div', { class: 'card-meta' }, [x.year, x.group].filter(Boolean).join(' · ')));
+  if (!m && hasMetaKeys() && enrichIo) {
+    (card as HTMLElement & { enrich?: () => void }).enrich = async () => {
+      const got = await getMeta(kind, x).catch(() => undefined);
+      if (!got) return;
+      const nb = ratingBadge(x, got);
+      if (nb) badge ? badge.replaceWith(nb) : box.appendChild(nb);
+      badge = nb;
+      if (!x.logo && got.poster) {
+        const na = thumb(img(got.poster), x.name, 'poster');
+        art.replaceWith(na);
+        art = na;
+      }
+    };
+    enrichIo.observe(card);
+  }
+  return card;
 }
 
 /** Griglia con caricamento progressivo: regge anche decine di migliaia di titoli. */
@@ -43,7 +99,7 @@ function grid(items: Item[], open: (x: Item) => void, empty = t('lib.noTitles'))
   return g;
 }
 
-function rail(title: string, nodes: HTMLElement[]): HTMLElement | null {
+export function rail(title: string, nodes: HTMLElement[]): HTMLElement | null {
   if (!nodes.length) return null;
   const kind = nodes[0].classList.contains('wide') ? ' wide' : nodes[0].classList.contains('ch-tile') ? ' tiles' : '';
   const track = h('div', { class: 'rail-track' + kind }, nodes);
@@ -61,9 +117,11 @@ export async function openMovie(m: Movie) {
   const src = active();
   const key = `movie:${m.id}`;
   const p = progressOf(key);
-  const plot = h('p', { class: 'plot' }, src?.type === 'xtream' ? t('lib.loadingPlot') : '');
+  const plot = h('p', { class: 'plot' }, src?.type === 'xtream' || hasMetaKeys() ? t('lib.loadingPlot') : '');
   const facts = h('div', { class: 'facts' });
   const backdrop = h('div', { class: 'd-backdrop' });
+  const line = h('div', { class: 'd-line' }, metaLine(m, cachedMeta('movie', m)));
+  const chips = h('div', null, ratingChips(m, cachedMeta('movie', m)));
   const fav = h('button', { class: 'btn ghost' });
   const paintFav = () => fav.replaceChildren(icon('heart', 18), isFav('movie', m.id) ? t('lib.inMyList') : t('lib.myList'));
   paintFav();
@@ -78,21 +136,34 @@ export async function openMovie(m: Movie) {
     fav);
   const box = h('div', { class: 'detail' }, backdrop,
     h('div', { class: 'd-body' }, thumb(img(m.logo), m.name, 'poster d-poster'),
-      h('div', { class: 'd-info' }, h('h2', null, m.name),
-        h('div', { class: 'chips' }, m.year ? h('span', { class: 'chip' }, String(m.year)) : null, m.rating ? h('span', { class: 'chip' }, icon('star', 12), m.rating.toFixed(1)) : null, h('span', { class: 'chip' }, m.group)),
+      h('div', { class: 'd-info' }, h('h2', null, m.name), line, chips,
         plot, facts, actions)));
   const close = modal(box, { wide: true });
+  let tmdbId: number | undefined;
+  let hasBackdrop = false;
   if (src?.type === 'xtream' && m.xid) {
     try {
       const i = await vodInfo(src as XtreamSource, m.xid);
-      plot.textContent = i.plot || t('lib.noPlot');
-      facts.append(...[[t('lib.genre'), i.genre], [t('lib.duration'), i.duration], [t('lib.director'), i.director], [t('lib.cast'), i.cast]]
+      tmdbId = i.tmdbId;
+      plot.textContent = i.plot || '';
+      facts.append(...[[t('lib.director'), i.director], [t('lib.cast'), i.cast]]
         .filter(([, v]) => v).map(([k, v]) => h('div', null, h('b', null, k + ': '), v!)));
-      if (i.backdrop) backdrop.appendChild(h('img', { src: img(i.backdrop)!, alt: '', referrerPolicy: 'no-referrer' }));
+      if (i.backdrop) (backdrop.appendChild(h('img', { src: img(i.backdrop)!, alt: '', referrerPolicy: 'no-referrer' })), (hasBackdrop = true));
     } catch {
-      plot.textContent = '';
+      /* dettagli del provider non disponibili */
     }
   }
+  const meta = await getMeta('movie', m, { full: true, tmdbId }).catch(() => undefined);
+  applyMeta(m, meta, { plot, line, chips, backdrop, hasBackdrop });
+}
+
+/** Completa una scheda con i dati extra (TMDB/OMDb), senza sovrascrivere quelli del provider. */
+function applyMeta(x: Item, m: Meta | undefined, el: { plot: HTMLElement; line: HTMLElement; chips: HTMLElement; backdrop: HTMLElement; hasBackdrop: boolean }) {
+  const cur = el.plot.textContent?.trim();
+  if (!cur || cur === t('lib.loadingPlot')) el.plot.textContent = m?.overview || t('lib.noPlot');
+  el.line.textContent = metaLine(x, m);
+  el.chips.replaceChildren(...[ratingChips(x, m)].filter((c): c is HTMLElement => !!c));
+  if (!el.hasBackdrop && m?.backdrop) el.backdrop.appendChild(h('img', { src: img(m.backdrop)!, alt: '', referrerPolicy: 'no-referrer' }));
 }
 
 /* ---------------- dettaglio serie ---------------- */
@@ -100,8 +171,10 @@ export async function openSeries(s: Series, autoEpisode?: Episode) {
   const src = active();
   const seasonsBar = h('div', { class: 'seg seasons' });
   const epList = h('div', { class: 'ep-list' }, h('div', { class: 'skeleton-lines' }, h('i'), h('i'), h('i')));
-  const plot = h('p', { class: 'plot' });
+  const plot = h('p', { class: 'plot' }, src?.type === 'xtream' || hasMetaKeys() ? t('lib.loadingPlot') : '');
   const backdrop = h('div', { class: 'd-backdrop' });
+  const line = h('div', { class: 'd-line' }, metaLine(s, cachedMeta('series', s)));
+  const chips = h('div', null, ratingChips(s, cachedMeta('series', s)));
   const fav = h('button', { class: 'btn ghost' });
   const paintFav = () => fav.replaceChildren(icon('heart', 18), isFav('series', s.id) ? t('lib.inMyList') : t('lib.myList'));
   paintFav();
@@ -110,24 +183,27 @@ export async function openSeries(s: Series, autoEpisode?: Episode) {
 
   const box = h('div', { class: 'detail' }, backdrop,
     h('div', { class: 'd-body' }, thumb(img(s.logo), s.name, 'poster d-poster'),
-      h('div', { class: 'd-info' }, h('h2', null, s.name),
-        h('div', { class: 'chips' }, s.year ? h('span', { class: 'chip' }, String(s.year)) : null, s.rating ? h('span', { class: 'chip' }, icon('star', 12), s.rating.toFixed(1)) : null, h('span', { class: 'chip' }, s.group)),
+      h('div', { class: 'd-info' }, h('h2', null, s.name), line, chips,
         plot, h('div', { class: 'row gap wrap' }, resumeBtn, fav))),
     h('div', { class: 'd-episodes' }, seasonsBar, epList));
   const close = modal(box, { wide: true });
 
   let episodes = s.episodes || [];
+  let tmdbId: number | undefined;
+  let hasBackdrop = false;
   if (src?.type === 'xtream' && s.xid) {
     try {
       const info = await seriesInfo(src as XtreamSource, s);
       episodes = info.episodes;
       s.episodes = episodes;
+      tmdbId = info.tmdbId;
       plot.textContent = info.plot || '';
-      if (info.backdrop) backdrop.appendChild(h('img', { src: img(info.backdrop)!, alt: '', referrerPolicy: 'no-referrer' }));
+      if (info.backdrop) (backdrop.appendChild(h('img', { src: img(info.backdrop)!, alt: '', referrerPolicy: 'no-referrer' })), (hasBackdrop = true));
     } catch (e) {
       toast((e as Error).message, 'error');
     }
   }
+  getMeta('series', s, { full: true, tmdbId }).catch(() => undefined).then((m) => applyMeta(s, m, { plot, line, chips, backdrop, hasBackdrop }));
   if (!episodes.length) {
     epList.replaceChildren(h('div', { class: 'empty' }, t('lib.noEpisodes')));
     return;
@@ -211,58 +287,6 @@ function catalog(kind: 'movie' | 'series'): HTMLElement {
 }
 export const moviesView = () => catalog('movie');
 export const seriesView = () => catalog('series');
-
-export function homeView(go: (r: string) => void): HTMLElement {
-  const lib = state.lib!;
-  const movies = lib.movies.filter((m) => !hidden(m));
-  const series = lib.series.filter((m) => !hidden(m));
-  const live = lib.live.filter((c) => !hidden(c));
-  const byId = new Map<string, Movie | Series>([...movies, ...series].map((x) => [x.id, x]));
-
-  // continua a guardare
-  const cont = state.history.filter((x) => x.dur && x.pos / x.dur < 0.95).slice(0, 20).map((x) => {
-    const target = x.kind === 'movie' ? byId.get(x.id) : x.seriesId ? byId.get(x.seriesId) : undefined;
-    if (!target) return null;
-    const bar = h('div', { class: 'card-progress' }, h('i'));
-    (bar.firstChild as HTMLElement).style.width = `${(x.pos / x.dur) * 100}%`;
-    return h('button', { class: 'card wide', on: { click: () => (isSeries(target) ? openSeries(target) : openMovie(target as Movie)) } },
-      h('div', { class: 'card-art' }, thumb(img(x.logo || target.logo), x.name, 'poster wide'), bar,
-        h('span', { class: 'play-over' }, icon('play', 22))),
-      h('div', { class: 'card-title' }, x.name), h('div', { class: 'card-meta' }, t('lib.left', { t: fmtTime(x.dur - x.pos) })));
-  }).filter((x): x is HTMLButtonElement => !!x);
-
-  const favLive = live.filter((c) => isFav('live', c.id)).slice(0, 30);
-  const chTile = (c: Channel) => h('button', { class: 'ch-tile', on: { click: () => play(channelRequest(c), favLive.length ? favLive : live) } },
-    thumb(img(c.logo), c.name, 'ch-logo lg'), h('span', null, c.name));
-  const recent = (xs: Item[]) => xs.some((x) => x.added) ? xs.slice().sort((a, b) => (b.added || 0) - (a.added || 0)) : xs.slice(-30).reverse();
-  const open = (x: Item) => (isSeries(x) ? openSeries(x) : openMovie(x as Movie));
-  const myList = [...movies, ...series].filter((x) => isFav(isSeries(x) ? 'series' : 'movie', x.id));
-
-  // hero: primo titolo di "continua" oppure un film ben votato
-  const pick = (cont.length && state.history[0] && (byId.get(state.history[0].seriesId || state.history[0].id))) ||
-    movies.filter((m) => m.logo).sort((a, b) => (b.rating || 0) - (a.rating || 0))[Math.floor(Math.random() * 8)] || movies[0] || series[0];
-  const hero = pick ? h('section', { class: 'hero' },
-    h('div', { class: 'hero-art' }, thumb(img(pick.logo), pick.name, 'hero-img')),
-    h('div', { class: 'hero-text' },
-      h('span', { class: 'eyebrow' }, isSeries(pick) ? t('home.featuredSeries') : t('home.featuredMovie')),
-      h('h1', null, pick.name),
-      h('div', { class: 'chips' }, pick.year ? h('span', { class: 'chip' }, String(pick.year)) : null, pick.rating ? h('span', { class: 'chip' }, icon('star', 12), pick.rating.toFixed(1)) : null, h('span', { class: 'chip' }, pick.group)),
-      h('div', { class: 'row gap' },
-        h('button', { class: 'btn primary lg', on: { click: () => open(pick) } }, icon('play', 18), t('home.watchNow')),
-        h('button', { class: 'btn ghost lg', on: { click: () => go('live') } }, icon('live', 18), t('nav.live'))))) : null;
-
-  const stats = h('div', { class: 'stats' },
-    ...[['live', live.length, t('common.channels'), 'live'], ['movie', movies.length, t('nav.movies'), 'movies'], ['series', series.length, t('nav.series'), 'series']].map(([ic, n, l, r]) =>
-      h('button', { class: 'stat', on: { click: () => go(r as string) } }, icon(ic as string, 22), h('b', null, num(n as number)), h('span', null, l as string))));
-
-  return h('div', { class: 'page home' }, hero, stats,
-    rail(t('home.continue'), cont),
-    rail(t('home.favChannels'), favLive.map(chTile)),
-    rail(t('lib.myList'), myList.slice(0, 30).map((x) => poster(x, () => open(x)))),
-    rail(t('home.recentMovies'), recent(movies).slice(0, 30).map((x) => poster(x, () => open(x)))),
-    rail(t('home.recentSeries'), recent(series).slice(0, 30).map((x) => poster(x, () => open(x)))),
-    !favLive.length ? rail(t('home.onAir'), live.slice(0, 30).map(chTile)) : null);
-}
 
 export function searchView(): HTMLElement {
   const input = h('input', { class: 'search-input xl', type: 'search', placeholder: t('search.placeholder') });

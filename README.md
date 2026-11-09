@@ -13,6 +13,7 @@ Runs on **Fire TV / Firestick**, **Android TV** and in your **PC browser**.
   - [Install on Android TV](#install-on-android-tv)
   - [Add a playlist](#add-a-playlist)
   - [Find your way around](#find-your-way-around)
+  - [Ratings and artwork (TMDB / OMDb)](#ratings-and-artwork-tmdb--omdb)
   - [Language and themes](#language-and-themes)
   - [Using the remote](#using-the-remote)
   - [Updates](#updates)
@@ -69,6 +70,10 @@ You can add more playlists or edit them from **Settings**.
 
 ### Find your way around
 
+**Home**: a full-screen showcase rotates through featured movies and series with backdrop, ratings, genres and plot, followed by rows: continue watching, channels on air now (with the current programme), my list, top rated, recently added and the biggest genres.
+
+![Home rows: channels on air now and top rated titles](docs/screenshots/home-rows.png)
+
 **Live TV**: categories, search, favorites, what's on now and next, a full TV guide, and catch-up ("Replay" / "From the start") when the provider supports it.
 
 ![Live TV with the TV guide](docs/screenshots/live.png)
@@ -80,6 +85,25 @@ You can add more playlists or edit them from **Settings**.
 | ![Movie catalog](docs/screenshots/movies.png) | ![Series detail with seasons and episodes](docs/screenshots/series.png) |
 
 **Parental control**: adult categories can be hidden behind a PIN.
+
+### Ratings and artwork (TMDB / OMDb)
+
+ORBITA can show **IMDb**, **Rotten Tomatoes** and **TMDB** ratings, plus backdrops, genres, runtime and plots in your language. It's optional and uses free keys that you create yourself:
+
+| Service | What it adds | Get a key |
+|---|---|---|
+| **TMDB** | Backdrops, posters for titles without one, plot in your language, genres, runtime, TMDB rating | Free account on [themoviedb.org](https://www.themoviedb.org/settings/api) → *Settings → API* (use the **API key**, v3) |
+| **OMDb** | IMDb and Rotten Tomatoes ratings | Free key on [omdbapi.com](https://www.omdbapi.com/apikey.aspx) (1,000 requests a day) |
+
+Paste the keys in **Settings → Ratings and artwork** and press **Check and save**: ORBITA tests them before saving and stores them encrypted on the device.
+
+Without keys, ORBITA still uses what an **Xtream** provider supplies (rating, plot, backdrop). Results are cached on the device for three weeks, cards are only looked up when they appear on screen, and OMDb (which has a low daily limit) is only queried for the showcase and for detail pages.
+
+| Settings | Movie detail |
+|---|---|
+| ![Ratings and artwork settings](docs/screenshots/settings-ratings.png) | ![Movie detail with IMDb, Rotten Tomatoes and TMDB ratings](docs/screenshots/movie.png) |
+
+To look up details, the titles you browse are sent to TMDB and OMDb. *This product uses the TMDB API but is not endorsed or certified by TMDB.*
 
 ### Language and themes
 
@@ -163,7 +187,7 @@ npm run dev
 |---|---|
 | `npm run dev` | Development: Vite + server with automatic restart |
 | `npm start` | Production build and server on http://127.0.0.1:7878 |
-| `npm test` | Tests (Vitest): M3U parser, Xtream with a mocked provider, server protections |
+| `npm test` | Tests (Vitest): M3U parser, Xtream with a mocked provider, server protections, title matching for ratings |
 | `npm run build` | Type check + build into `dist/` |
 | `npm run build:android-web` | Build the interface into `android/app/src/main/assets/web/` |
 | `npm run apk` | Interface + signed release APK (`android/app/build/outputs/apk/release/`) |
@@ -180,12 +204,14 @@ src/
     api.ts           network calls (Node server or Android bridge)
     m3u.ts           M3U parser
     xtream.ts        Xtream Codes API, get.php links, catch-up
+    meta.ts          ratings and artwork: Xtream, TMDB, OMDb, cache
     store.ts         encrypted IndexedDB (AES-GCM) and PIN
     types.ts, util.ts
   ui/
     dom.ts           safe DOM building, icons, toasts, dialogs
     onboard.ts       welcome screen, playlist form, "Add from your phone"
-    library.ts       home, movies, series, search
+    home.ts          home: rotating showcase and rows
+    library.ts       movies, series, search, detail pages, cards and ratings
     live.ts          live TV and TV guide
     player.ts        web player (hls.js, mpegts.js)
     settings.ts      settings, language and theme pickers
@@ -283,4 +309,5 @@ Secrets required in the repository (*Settings → Secrets and variables → Acti
 | Android WebView | Loads only the internal asset origin; any other navigation is blocked and the bridge is never exposed to external pages. |
 | Phone server | On only while the QR is open (15 min max), local-network clients only, 6-digit code locking after 5 errors, 32 KB max body, one playlist per session. |
 | Huge responses | Size limits and timeouts on playlists, HLS, EPG (gzip included) and images. |
+| Ratings services | Optional. TMDB/OMDb keys stored encrypted; requests go through the same proxy or native path as playlists, with results cached locally. |
 | Parental control | PIN hashed with PBKDF2-SHA256 (210,000 iterations), constant-time comparison. |

@@ -1,4 +1,5 @@
-import { t } from './i18n';
+import { locale, t } from './i18n';
+import { loadMetaKeys, setMetaLang } from './core/meta';
 import { fetchEpg, fetchText } from './core/api';
 import { parseM3u } from './core/m3u';
 import { checkPin, hashPin, kv, sealGet, sealSet, type PinHash } from './core/store';
@@ -36,6 +37,8 @@ export async function init(): Promise<void> {
   state.settings = { ...state.settings, ...((await kv.get<Settings>('settings')) || {}) };
   state.favorites = new Set((await kv.get<string[]>('favorites')) || []);
   state.history = (await kv.get<HistoryEntry[]>('history')) || [];
+  setMetaLang(locale());
+  await loadMetaKeys().catch(() => {});
   const src = active();
   if (src) state.lib = (await sealGet<Library>('lib:' + src.id)) || null;
 }

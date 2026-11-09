@@ -3,7 +3,8 @@ import type { Episode, Series } from './core/types';
 import { native } from './core/api';
 import { active, init, state } from './state';
 import { clear, h, icon, toast } from './ui/dom';
-import { favoritesView, homeView, moviesView, playEpisode, searchView, seriesView } from './ui/library';
+import { favoritesView, moviesView, playEpisode, searchView, seriesView } from './ui/library';
+import { homeView } from './ui/home';
 import { liveView } from './ui/live';
 import { welcome } from './ui/onboard';
 import { playerOpen } from './ui/player';
@@ -66,7 +67,7 @@ function render() {
   main.appendChild(view);
   main.scrollTop = 0;
   if (r !== 'search') requestAnimationFrame(() =>
-    (main.querySelector<HTMLElement>('.ch-row.on') || main.querySelector<HTMLElement>('.on') || main.querySelector<HTMLElement>('button, a'))?.focus({ preventScroll: true }));
+    (main.querySelector<HTMLElement>('.ch-row.on') || main.querySelector<HTMLElement>('.hero2-actions .btn') || main.querySelector<HTMLElement>('button.on, a.on') || main.querySelector<HTMLElement>('button, a'))?.focus({ preventScroll: true }));
 }
 
 /* ---------------- navigazione spaziale (telecomando / frecce) ---------------- */

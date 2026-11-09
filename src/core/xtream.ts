@@ -139,19 +139,19 @@ export async function loadXtream(s: XtreamSource, onStep?: (msg: string) => void
   };
 }
 
-export interface VodInfo { plot?: string; cast?: string; director?: string; genre?: string; duration?: string; backdrop?: string; trailer?: string; rating?: number; year?: number }
+export interface VodInfo { tmdbId?: number; plot?: string; cast?: string; director?: string; genre?: string; duration?: string; backdrop?: string; trailer?: string; rating?: number; year?: number }
 
 export async function vodInfo(s: XtreamSource, id: number): Promise<VodInfo> {
   const j = await fetchJson<{ info?: Record<string, unknown> }>(api(s, 'get_vod_info', `&vod_id=${id}`), s.ua);
   const i = (j?.info || {}) as Record<string, unknown>;
   const bd = Array.isArray(i.backdrop_path) ? (i.backdrop_path[0] as string) : undefined;
   return {
-    plot: str(i.plot || i.description), cast: str(i.cast || i.actors), director: str(i.director), genre: str(i.genre),
+    tmdbId: num(i.tmdb_id) || undefined, plot: str(i.plot || i.description), cast: str(i.cast || i.actors), director: str(i.director), genre: str(i.genre),
     duration: str(i.duration), backdrop: safeImg(bd), trailer: str(i.youtube_trailer), rating: num(i.rating), year: yearOf(str(i.releasedate) ?? ''),
   };
 }
 
-export async function seriesInfo(s: XtreamSource, series: Series): Promise<{ episodes: Episode[]; plot?: string; backdrop?: string; cast?: string; genre?: string }> {
+export async function seriesInfo(s: XtreamSource, series: Series): Promise<{ episodes: Episode[]; tmdbId?: number; plot?: string; backdrop?: string; cast?: string; genre?: string }> {
   const j = await fetchJson<{ info?: Record<string, unknown>; episodes?: Record<string, Record<string, unknown>[]> }>(
     api(s, 'get_series_info', `&series_id=${series.xid}`), s.ua);
   const episodes: Episode[] = [];
@@ -171,7 +171,7 @@ export async function seriesInfo(s: XtreamSource, series: Series): Promise<{ epi
   episodes.sort((a, b) => a.season - b.season || a.episode - b.episode);
   const i = (j?.info || {}) as Record<string, unknown>;
   const bd = Array.isArray(i.backdrop_path) ? (i.backdrop_path[0] as string) : undefined;
-  return { episodes, plot: str(i.plot), backdrop: safeImg(bd), cast: str(i.cast), genre: str(i.genre) };
+  return { episodes, tmdbId: num(i.tmdb) || num(i.tmdb_id) || undefined, plot: str(i.plot), backdrop: safeImg(bd), cast: str(i.cast), genre: str(i.genre) };
 }
 
 const b64 = (s: string) => {

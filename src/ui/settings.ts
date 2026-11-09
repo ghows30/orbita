@@ -5,6 +5,40 @@ import { askConfirm, askPin, h, icon, modal, toast } from './dom';
 import { sourceForm } from './onboard';
 import { currentTheme, setTheme, THEMES } from './theme';
 import { currentLang, LANGS, locale, num, setLang, t } from '../i18n';
+import { metaKeys, saveMetaKeys, setMetaLang, testMetaKeys } from '../core/meta';
+
+/** Chiavi TMDB / OMDb: facoltative, cifrate sul dispositivo, provate prima di salvarle. */
+function metaSection(rerender: () => void): HTMLElement {
+  const k = metaKeys();
+  const inp = (value: string | undefined, label: string) =>
+    h('input', { value: value || '', autocomplete: 'off', autocapitalize: 'off', spellcheck: false, 'aria-label': label, placeholder: '••••••••' });
+  const tmdb = inp(k.tmdb, 'TMDB');
+  const omdb = inp(k.omdb, 'OMDb');
+  const save = h('button', { class: 'btn primary', type: 'submit' }, icon('check', 18), t('set.metaSave'));
+  const form = h('form', { class: 'stack meta-form' },
+    h('p', { class: 'muted' }, t('set.metaDesc')),
+    h('label', { class: 'field' }, h('span', null, t('set.tmdbKey')), tmdb, h('small', null, t('set.tmdbHint'))),
+    h('label', { class: 'field' }, h('span', null, t('set.omdbKey')), omdb, h('small', null, t('set.omdbHint'))),
+    h('div', { class: 'row gap' }, save),
+    h('p', { class: 'fine' }, t('set.metaPrivacy')),
+    h('p', { class: 'fine' }, t('set.tmdbNotice')));
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    save.disabled = true;
+    try {
+      const next = { tmdb: tmdb.value.trim(), omdb: omdb.value.trim() };
+      const ok = await testMetaKeys(next);
+      const bad = (['tmdb', 'omdb'] as const).filter((s) => ok[s] === false);
+      if (bad.length) return toast(t('set.metaBad', { s: bad.map((s) => s.toUpperCase()).join(', ') }), 'error');
+      await saveMetaKeys(next);
+      toast(next.tmdb || next.omdb ? t('set.metaSaved') : t('set.metaCleared'), 'ok');
+      rerender();
+    } finally {
+      save.disabled = false;
+    }
+  });
+  return form;
+}
 
 /** Scelta del tema: cambia sul posto, senza ridisegnare la pagina (il focus resta dov'è). */
 function themePicker(): HTMLElement {
@@ -32,6 +66,7 @@ function langPicker(rerender: () => void): HTMLElement {
       on: { click: () => {
         if (l.id === currentLang()) return;
         setLang(l.id);
+        setMetaLang(locale());
         native?.setLang?.(l.id);
         rerender();
         requestAnimationFrame(() => document.querySelector<HTMLElement>(`.lang-seg [data-lang="${l.id}"]`)?.focus());
@@ -126,6 +161,7 @@ export function settingsView(rerender: () => void): HTMLElement {
       refreshBtn),
     h('section', { class: 'card pad' }, h('h3', null, t('set.language')), langPicker(rerender)),
     h('section', { class: 'card pad' }, h('h3', null, t('set.appearance')), themePicker()),
+    h('section', { class: 'card pad' }, h('h3', null, t('set.meta')), metaSection(rerender)),
     h('section', { class: 'card pad' }, h('h3', null, t('set.playback')), autoNext),
     h('section', { class: 'card pad' }, h('h3', null, t('set.protection')), parental, unlockBtn,
       h('button', { class: 'btn ghost', on: { click: async () => (await clearHistory(), toast(t('set.historyCleared'), 'ok')) } }, icon('clock', 18), t('set.clearHistory'))),

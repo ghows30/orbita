@@ -62,6 +62,7 @@ const P: Record<string, string> = {
   tracks: 'M4 6h16M4 12h10M4 18h7M17 15l3 3-3 3',
   list: 'M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01',
   plus: 'M12 5v14M5 12h14',
+  check: 'M5 12.5l4.5 4.5L19 7',
   refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',
   trash: 'M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3',
   lock: 'M6 11h12v10H6zM8 11V7a4 4 0 0 1 8 0v4',
