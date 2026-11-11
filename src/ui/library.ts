@@ -7,6 +7,7 @@ import { active, episodeStreamUrl, hidden, isFav, movieStreamUrl, progressOf, st
 import { clear, h, icon, modal, thumb, toast } from './dom';
 import { locale, num, t } from '../i18n';
 import { channelRequest, play } from './player';
+import { rememberInfo } from './playerExtras';
 
 export type Item = Movie | Series;
 export const isSeries = (x: Item): x is Series => x.id.startsWith('r') || x.id.startsWith('s');
@@ -128,7 +129,7 @@ export async function openMovie(m: Movie) {
   fav.addEventListener('click', async () => (await toggleFav('movie', m.id), paintFav()));
   const start = (resume: boolean) => {
     close();
-    play({ kind: 'movie', live: false, title: m.name, subtitle: [m.year, m.group].filter(Boolean).join(' · '), logo: m.logo, url: movieStreamUrl(m), resumeKey: key, startAt: resume ? undefined : 0 });
+    play({ kind: 'movie', live: false, title: m.name, subtitle: [m.year, m.group].filter(Boolean).join(' · '), logo: m.logo, url: movieStreamUrl(m), resumeKey: key, startAt: resume ? undefined : 0, movie: m });
   };
   const actions = h('div', { class: 'row gap wrap' },
     p && p.pos > 15 ? h('button', { class: 'btn primary', on: { click: () => start(true) } }, icon('play', 18), t('lib.resumeFrom', { t: fmtTime(p.pos) })) : null,
@@ -145,6 +146,7 @@ export async function openMovie(m: Movie) {
     try {
       const i = await vodInfo(src as XtreamSource, m.xid);
       tmdbId = i.tmdbId;
+      rememberInfo('movie:' + m.id, { plot: i.plot, backdrop: i.backdrop });
       plot.textContent = i.plot || '';
       facts.append(...[[t('lib.director'), i.director], [t('lib.cast'), i.cast]]
         .filter(([, v]) => v).map(([k, v]) => h('div', null, h('b', null, k + ': '), v!)));
@@ -197,6 +199,7 @@ export async function openSeries(s: Series, autoEpisode?: Episode) {
       episodes = info.episodes;
       s.episodes = episodes;
       tmdbId = info.tmdbId;
+      rememberInfo('series:' + s.id, { plot: info.plot, backdrop: info.backdrop });
       plot.textContent = info.plot || '';
       if (info.backdrop) (backdrop.appendChild(h('img', { src: img(info.backdrop)!, alt: '', referrerPolicy: 'no-referrer' })), (hasBackdrop = true));
     } catch (e) {

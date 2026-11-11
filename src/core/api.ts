@@ -23,6 +23,8 @@ export interface NativeBridge {
   setLang?(lang: string): void;
   /** Come remoteStart, ma lo smartphone invia le chiavi API TMDB/OMDb. Facoltativo: APK fino alla 1.2.0 non lo hanno. */
   remoteStartKeys?(): string;
+  /** Guida di un canale per il banner del player nativo (risposta a window.orbitaEpg). */
+  epgResult?(rid: string, json: string): void;
 }
 declare global {
   interface Window {
@@ -30,6 +32,7 @@ declare global {
     orbitaBack?: () => boolean;
     orbitaPlayerClosed?: (json: string) => void;
     orbitaRemoteSource?: (json: string) => void;
+    orbitaEpg?: (rid: string, channelId: string) => boolean;
   }
 }
 export const native: NativeBridge | undefined = typeof window !== 'undefined' ? window.OrbitaAndroid : undefined;
