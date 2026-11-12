@@ -136,6 +136,43 @@ function rewriteHls(text, baseUrl, ua) {
     .join('\n');
 }
 
+/* ---------------- rispetto dei limiti del provider ----------------
+   Molti provider stanno dietro Cloudflare: centinaia di copertine dallo stesso host in pochi secondi
+   fanno scattare il 429 sull'IP, e da lì falliscono anche le chiamate API (episodi delle serie).
+   Per ogni host: poche copertine alla volta e, dopo un 429, una pausa in cui le copertine non partono. */
+const LOGO_PARALLEL = 3;
+const hosts = new Map();
+const hostOf = (u) => { try { return new URL(u).host; } catch { return ''; } };
+const gate = (host) => {
+  let g = hosts.get(host);
+  if (!g) hosts.set(host, (g = { active: 0, queue: [], coolUntil: 0 }));
+  return g;
+};
+function noteStatus(url, status, retryAfter) {
+  if (status !== 429) return;
+  const g = gate(hostOf(url));
+  const wait = Math.min(120, Number(retryAfter) || 20) * 1000;
+  g.coolUntil = Math.max(g.coolUntil, Date.now() + wait);
+  console.warn(`[orbita] 429 da ${hostOf(url)}: pausa copertine ${Math.round(wait / 1000)} s`);
+}
+const logoCount = new Map();
+async function withLogoSlot(url, fn) {
+  // registro: quante copertine per host (la prima e poi ogni 50), per capire se pesano sul provider
+  const h = hostOf(url);
+  const n = (logoCount.get(h) || 0) + 1;
+  logoCount.set(h, n);
+  if (n === 1 || n % 50 === 0) console.log(`[orbita] copertine da ${h}: ${n}`);
+  const g = gate(h);
+  if (g.coolUntil > Date.now()) throw Object.assign(new Error('cooldown'), { code: 'ECOOL' });
+  if (g.active >= LOGO_PARALLEL) await new Promise((r) => g.queue.push(r));
+  g.active++;
+  try {
+    return await fn();
+  } finally {
+    g.active--;
+    g.queue.shift()?.();
+  }
+}
 /* ---------------- handler API ---------------- */
 async function apiOpen(req, res) {
   const b = await readJson(req);
@@ -146,10 +183,23 @@ async function apiOpen(req, res) {
 
 async function apiFetch(req, res) {
   const b = await readJson(req);
+  // registro senza credenziali: solo host, azione Xtream e id
+  let what = redact(b.url);
+  try {
+    const u = new URL(b.url);
+    const q = u.searchParams;
+    what = `${u.host} ${q.get('action') || u.pathname.split('/').pop()}${['series_id', 'vod_id', 'stream_id'].map((k) => (q.get(k) ? ` ${k}=${q.get(k)}` : '')).join('')}`;
+  } catch { /* URL già validato più avanti */ }
+  const t0 = Date.now();
+  console.log(`[orbita] → ${what}`);
+  res.on('close', () => console.log(`[orbita] ← ${what}  ${res.statusCode}  ${Date.now() - t0} ms${res.writableFinished ? '' : '  (chiusa dal browser)'}`));
   const { res: up } = await guardedGet(b.url, { ua: b.ua, timeoutMs: 45000 });
   if (up.statusCode < 200 || up.statusCode >= 300) {
     up.resume();
-    return json(res, 502, { error: `Il provider ha risposto con errore ${up.statusCode}.`, status: up.statusCode });
+    noteStatus(b.url, up.statusCode, up.headers['retry-after']);
+    // Retry-After (secondi) per i 429: il client aspetta quanto chiede il provider invece di insistere
+    const retryAfter = Number(up.headers['retry-after']) || undefined;
+    return json(res, 502, { error: `Il provider ha risposto con errore ${up.statusCode}.`, status: up.statusCode, retryAfter });
   }
   const body = await readBody(up, MAX_TEXT);
   send(res, 200, body, { 'content-type': 'text/plain; charset=utf-8' });
@@ -201,7 +251,14 @@ const logoCache = new Map();
 async function proxyLogo(req, res, raw) {
   const hit = logoCache.get(raw);
   if (hit) return send(res, 200, hit.body, { 'content-type': hit.ct, 'cache-control': 'private, max-age=86400' });
-  const { res: up } = await guardedGet(raw, { timeoutMs: 12000 });
+  let up;
+  try {
+    ({ res: up } = await withLogoSlot(raw, () => guardedGet(raw, { timeoutMs: 12000 })));
+  } catch (err) {
+    if (err?.code === 'ECOOL') return send(res, 503, '', { 'retry-after': '30' });
+    throw err;
+  }
+  noteStatus(raw, up.statusCode, up.headers['retry-after']);
   const ct = String(up.headers['content-type'] || '');
   if (up.statusCode !== 200 || !/^image\/(png|jpe?g|gif|webp|avif|svg\+xml|x-icon|vnd\.microsoft\.icon)/i.test(ct)) {
     up.resume();

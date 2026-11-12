@@ -1,7 +1,7 @@
 import { img } from '../core/api';
 import type { Episode, Movie, Series, XtreamSource } from '../core/types';
 import { debounce, fmtTime, fold } from '../core/util';
-import { seriesInfo, vodInfo } from '../core/xtream';
+import { cooldownLeft, seriesInfo, vodInfo, waitLabel } from '../core/xtream';
 import { bestRating, cachedMeta, getMeta, hasMetaKeys, type Meta, type MetaKind } from '../core/meta';
 import { active, episodeStreamUrl, hidden, isFav, movieStreamUrl, progressOf, state, toggleFav } from '../state';
 import { clear, h, icon, modal, thumb, toast } from './dom';
@@ -203,7 +203,24 @@ export async function openSeries(s: Series, autoEpisode?: Episode) {
       plot.textContent = info.plot || '';
       if (info.backdrop) (backdrop.appendChild(h('img', { src: img(info.backdrop)!, alt: '', referrerPolicy: 'no-referrer' })), (hasBackdrop = true));
     } catch (e) {
-      toast((e as Error).message, 'error');
+      // il provider può rifiutare per un po' (es. troppe richieste): si offre di riprovare invece di "nessun episodio"
+      const retry = () => box.isConnected && (close(), openSeries(s, autoEpisode));
+      const msg = h('p', null, (e as Error).message);
+      epList.replaceChildren(h('div', { class: 'empty' }, msg,
+        h('button', { class: 'btn', on: { click: retry } }, icon('refresh', 16), t('common.retry'))));
+      if (cooldownLeft() > 0) {
+        // pausa del provider: conto alla rovescia e nuovo tentativo da solo, finché la scheda resta aperta
+        const tick = setInterval(() => {
+          const left = cooldownLeft();
+          if (!box.isConnected) return clearInterval(tick);
+          if (left > 0) return void (msg.textContent = t('lib.autoRetry', { s: waitLabel(left) }));
+          clearInterval(tick);
+          retry();
+        }, 1000);
+        msg.textContent = t('lib.autoRetry', { s: waitLabel(cooldownLeft()) });
+      } else toast((e as Error).message, 'error');
+      getMeta('series', s, { full: true }).catch(() => undefined).then((m) => applyMeta(s, m, { plot, line, chips, backdrop, hasBackdrop }));
+      return;
     }
   }
   getMeta('series', s, { full: true, tmdbId }).catch(() => undefined).then((m) => applyMeta(s, m, { plot, line, chips, backdrop, hasBackdrop }));
