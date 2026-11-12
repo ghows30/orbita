@@ -96,16 +96,54 @@ export function icon(name: keyof typeof P | string, size = 20, cls = ''): SVGSVG
   return svg;
 }
 
+/* Coda delle immagini: il browser apre al massimo 6 connessioni verso il server ORBITA.
+   Con centinaia di copertine in arrivo le occuperebbero tutte e le chiamate importanti
+   (episodi, guida) resterebbero in attesa: qui ne carichiamo poche alla volta, solo vicino allo schermo. */
+const IMG_PARALLEL = 4;
+let imgActive = 0;
+const imgQueue: (() => void)[] = [];
+const pumpImages = () => {
+  while (imgActive < IMG_PARALLEL && imgQueue.length) imgQueue.pop()!(); // prima le ultime arrivate: sono quelle a schermo
+};
+const imgIo = typeof IntersectionObserver !== 'undefined'
+  ? new IntersectionObserver((es) => {
+    for (const e of es) {
+      if (!e.isIntersecting) continue;
+      imgIo!.unobserve(e.target);
+      (e.target as HTMLElement & { loadImg?: () => void }).loadImg?.();
+    }
+  }, { rootMargin: '300px' })
+  : null;
+
 /** Immagine con fallback a iniziali se il logo non carica. */
 export function thumb(src: string | undefined, label: string, cls = 'thumb'): HTMLElement {
   const box = h('div', { class: cls });
   const initials = h('span', { class: 'initials' }, label.replace(/[^\p{L}\p{N} ]/gu, '').trim().slice(0, 2).toUpperCase() || '•');
   box.appendChild(initials);
   if (src) {
-    const im = h('img', { src, alt: '', loading: 'lazy', decoding: 'async', referrerPolicy: 'no-referrer' });
+    const im = h('img', { alt: '', decoding: 'async', referrerPolicy: 'no-referrer' });
     im.addEventListener('load', () => box.classList.add('loaded'));
     im.addEventListener('error', () => im.remove());
     box.appendChild(im);
+    const start = () => {
+      if (!box.isConnected) return pumpImages(); // card già sostituita: si passa alla prossima
+      imgActive++;
+      const done = () => {
+        imgActive--;
+        pumpImages();
+      };
+      im.addEventListener('load', done, { once: true });
+      im.addEventListener('error', done, { once: true });
+      im.src = src;
+    };
+    if (!imgIo || !src.startsWith('/logo')) im.src = src;
+    else {
+      (box as HTMLElement & { loadImg?: () => void }).loadImg = () => {
+        imgQueue.push(start);
+        pumpImages();
+      };
+      imgIo.observe(box);
+    }
   }
   return box;
 }

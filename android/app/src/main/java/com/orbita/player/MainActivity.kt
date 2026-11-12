@@ -40,6 +40,19 @@ class MainActivity : Activity() {
         runOnUiThread { web.evaluateJavascript("window.orbitaRemoteSource && window.orbitaRemoteSource(${JSONObject.quote(json)})", null) }
     }
     private var lastBack = 0L
+    private val epgWaiting = ConcurrentHashMap<String, (String) -> Unit>()
+    private var epgSeq = 0
+    /** Il player nativo chiede la guida di un canale: risponde l'app web, che ha già EPG e cache. */
+    private val epgSource: (String, (String) -> Unit) -> Unit = { id, cb ->
+        runOnUiThread {
+            if (epgWaiting.size > 50) epgWaiting.clear()
+            val rid = "e" + (++epgSeq)
+            epgWaiting[rid] = cb
+            web.evaluateJavascript("window.orbitaEpg ? window.orbitaEpg(${JSONObject.quote(rid)}, ${JSONObject.quote(id)}) : false") { r ->
+                if (r != "true") epgWaiting.remove(rid)?.invoke("[]")
+            }
+        }
+    }
     private val logoCache = object : LruCache<String, Pair<String, ByteArray>>(24 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Pair<String, ByteArray>) = value.second.size
     }
@@ -86,6 +99,7 @@ class MainActivity : Activity() {
         if (savedInstanceState != null) web.restoreState(savedInstanceState) else web.loadUrl("$ORIGIN/")
         web.requestFocus()
         BackKey.register(this, ::handleBack)
+        PlayerActivity.epgSource = epgSource
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -104,6 +118,8 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        if (PlayerActivity.epgSource === epgSource) PlayerActivity.epgSource = null
+        epgWaiting.clear()
         remote.stop()
         web.destroy()
         super.onDestroy()
@@ -170,6 +186,12 @@ class MainActivity : Activity() {
                 @Suppress("DEPRECATION")
                 startActivityForResult(Intent(this@MainActivity, PlayerActivity::class.java), REQ_PLAYER)
             }
+        }
+
+        /** Risposta a [epgSource]: JSON [{s,e,t}] della guida del canale. */
+        @JavascriptInterface
+        fun epgResult(rid: String, json: String) {
+            epgWaiting.remove(rid)?.invoke(if (json.length > 512 * 1024) "[]" else json)
         }
 
         @JavascriptInterface

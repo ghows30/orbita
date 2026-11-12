@@ -47,6 +47,7 @@ function renderNav() {
 }
 
 function render() {
+  document.body.classList.remove('nav-open');
   renderNav();
   clear(main);
   if (!state.lib || !state.sources.length) {
@@ -67,7 +68,7 @@ function render() {
   main.appendChild(view);
   main.scrollTop = 0;
   if (r !== 'search') requestAnimationFrame(() =>
-    (main.querySelector<HTMLElement>('.ch-row.on') || main.querySelector<HTMLElement>('.hero2-actions .btn') || main.querySelector<HTMLElement>('button.on, a.on') || main.querySelector<HTMLElement>('button, a'))?.focus({ preventScroll: true }));
+    (main.querySelector<HTMLElement>('.lv-grid') || main.querySelector<HTMLElement>('.hero2-actions .btn') || main.querySelector<HTMLElement>('button.on, a.on') || main.querySelector<HTMLElement>('button, a'))?.focus({ preventScroll: true }));
 }
 
 /* ---------------- navigazione spaziale (telecomando / frecce) ---------------- */
@@ -81,7 +82,9 @@ function spatial(e: KeyboardEvent) {
   if (t instanceof HTMLSelectElement) return;
   const scope = (t.closest('.modal-wrap') || document.body) as HTMLElement;
   const all = [...scope.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input, select, [tabindex="0"]')]
-    .filter((x) => x.offsetParent !== null && x !== t);
+    .filter((x) => x.offsetParent !== null && x !== t)
+    // la barra laterale sta sopra il contenuto: ci si entra e si esce solo con ←/→, su/giù restano dentro o fuori
+    .filter((x) => d[0] !== 0 || !!x.closest('.sidebar') === !!t.closest('.sidebar'));
   const r = t.getBoundingClientRect ? t.getBoundingClientRect() : new DOMRect();
   const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
   let best: HTMLElement | null = null;
@@ -113,6 +116,9 @@ async function boot() {
     toast(t('boot.storeError', { m: (e as Error).message }), 'error');
   }
   window.addEventListener('hashchange', render);
+  // barra laterale: si allarga quando il focus del telecomando ci entra
+  nav.addEventListener('focusin', () => document.body.classList.add('nav-open'));
+  nav.addEventListener('focusout', (e) => !nav.contains(e.relatedTarget as Node) && document.body.classList.remove('nav-open'));
   document.addEventListener('keydown', spatial);
   document.addEventListener('keydown', (e) => {
     if (playerOpen() || document.querySelector('.modal-wrap')) return;

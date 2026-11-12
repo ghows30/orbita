@@ -3,7 +3,7 @@ import { t, translateRemote } from '../i18n';
 // nel corpo delle POST e tornano come percorsi opachi /p/<token>.
 
 export class ApiError extends Error {
-  constructor(message: string, readonly status = 0) {
+  constructor(message: string, readonly status = 0, readonly retryAfter?: number) {
     super(message);
   }
 }
@@ -23,6 +23,8 @@ export interface NativeBridge {
   setLang?(lang: string): void;
   /** Come remoteStart, ma lo smartphone invia le chiavi API TMDB/OMDb. Facoltativo: APK fino alla 1.2.0 non lo hanno. */
   remoteStartKeys?(): string;
+  /** Guida di un canale per il banner del player nativo (risposta a window.orbitaEpg). */
+  epgResult?(rid: string, json: string): void;
 }
 declare global {
   interface Window {
@@ -30,6 +32,7 @@ declare global {
     orbitaBack?: () => boolean;
     orbitaPlayerClosed?: (json: string) => void;
     orbitaRemoteSource?: (json: string) => void;
+    orbitaEpg?: (rid: string, channelId: string) => boolean;
   }
 }
 export const native: NativeBridge | undefined = typeof window !== 'undefined' ? window.OrbitaAndroid : undefined;
@@ -56,13 +59,17 @@ async function post(path: string, body: unknown, signal?: AbortSignal): Promise<
   }
   if (!r.ok) {
     let msg = t('err.http', { c: r.status });
+    let status = r.status;
+    let retryAfter: number | undefined;
     try {
       const j = await r.json();
       if (j?.error) msg = translateRemote(String(j.error));
+      if (typeof j?.status === 'number') status = j.status; // codice del provider (es. 429), non quello del proxy
+      if (typeof j?.retryAfter === 'number') retryAfter = j.retryAfter;
     } catch {
       /* corpo non JSON */
     }
-    throw new ApiError(msg, r.status);
+    throw new ApiError(msg, status, retryAfter);
   }
   return r;
 }

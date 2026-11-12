@@ -47,6 +47,18 @@ object L10n {
         "tooManyCodes" to mapOf(
             "it" to "Troppi codici errati: riapri il QR sulla TV", "en" to "Too many wrong codes: reopen the QR on the TV",
             "es" to "Demasiados códigos erróneos: vuelve a abrir el QR en la TV", "de" to "Zu viele falsche Codes: QR auf dem TV neu öffnen"),
+        "noEpg" to mapOf(
+            "it" to "Nessuna informazione sul programma", "en" to "No programme information",
+            "es" to "Sin información del programa", "de" to "Keine Programminformationen"),
+        "after" to mapOf("it" to "Dopo", "en" to "Next", "es" to "Después", "de" to "Danach"),
+        "paused" to mapOf("it" to "In pausa", "en" to "Paused", "es" to "En pausa", "de" to "Pausiert"),
+        "skipIntro" to mapOf("it" to "Salta intro", "en" to "Skip intro", "es" to "Saltar intro", "de" to "Intro überspringen"),
+        "upNext" to mapOf("it" to "Prossimo episodio", "en" to "Next episode", "es" to "Siguiente episodio", "de" to "Nächste Folge"),
+        "startsIn" to mapOf(
+            "it" to "Inizia tra %1\$d s", "en" to "Starts in %1\$d s", "es" to "Empieza en %1\$d s", "de" to "Startet in %1\$d s"),
+        "nextHint" to mapOf(
+            "it" to "OK: guarda ora  ·  Indietro: annulla", "en" to "OK: watch now  ·  Back: cancel",
+            "es" to "OK: ver ahora  ·  Atrás: cancelar", "de" to "OK: jetzt ansehen  ·  Zurück: abbrechen"),
         "wrongCode" to mapOf(
             "it" to "Codice errato: controlla quello sulla TV", "en" to "Wrong code: check the one on the TV",
             "es" to "Código erróneo: comprueba el de la TV", "de" to "Falscher Code: prüfe den auf dem TV"),

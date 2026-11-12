@@ -10,6 +10,8 @@ export interface Settings {
   parental: boolean;
   pin?: PinHash;
   autoNext: boolean;
+  /** anteprime dei fotogrammi durante la ricerca in film ed episodi */
+  seekPreview?: boolean;
   activeSource?: string;
 }
 

@@ -122,5 +122,7 @@ export interface PlayRequest {
   channel?: Channel;
   series?: Series;
   episode?: Episode;
+  /** film (per la schermata di pausa) */
+  movie?: Movie;
   live: boolean;
 }

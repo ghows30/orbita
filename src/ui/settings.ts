@@ -175,6 +175,11 @@ export function settingsView(rerender: () => void): HTMLElement {
     await saveSettings();
   });
 
+  const seekPreview = toggle(t('set.seekPreview'), t('set.seekPreviewDesc'), state.settings.seekPreview !== false, async (v) => {
+    state.settings.seekPreview = v;
+    await saveSettings();
+  });
+
   const wipe = h('button', { class: 'btn danger', on: { click: async () => {
     if (!(await askConfirm(t('set.wipeConfirm'), t('set.wipeOk')))) return;
     await kv.clear();
@@ -193,7 +198,7 @@ export function settingsView(rerender: () => void): HTMLElement {
     h('section', { class: 'card pad' }, h('h3', null, t('set.language')), langPicker(rerender)),
     h('section', { class: 'card pad' }, h('h3', null, t('set.appearance')), themePicker()),
     h('section', { class: 'card pad' }, h('h3', null, t('set.meta')), metaSection(rerender)),
-    h('section', { class: 'card pad' }, h('h3', null, t('set.playback')), autoNext),
+    h('section', { class: 'card pad' }, h('h3', null, t('set.playback')), autoNext, seekPreview),
     h('section', { class: 'card pad' }, h('h3', null, t('set.protection')), parental, unlockBtn,
       h('button', { class: 'btn ghost', on: { click: async () => (await clearHistory(), toast(t('set.historyCleared'), 'ok')) } }, icon('clock', 18), t('set.clearHistory'))),
     h('section', { class: 'card pad' }, h('h3', null, t('set.security')),

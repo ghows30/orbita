@@ -1,7 +1,8 @@
 import { t } from '../i18n';
-import { fetchJson } from './api';
+import { ApiError, fetchJson } from './api';
 import type { Channel, EpgItem, Episode, Library, Movie, Series, XtreamSource } from './types';
-import { cleanTitle, decodeEntities, isAdult } from './util';
+import { kv, sealGet, sealSet } from './store';
+import { cleanTitle, decodeEntities, hash, isAdult } from './util';
 
 /* Le credenziali vengono SEMPRE codificate (l'originale le concatenava in chiaro negli URL API). */
 const e = encodeURIComponent;
@@ -141,8 +142,144 @@ export async function loadXtream(s: XtreamSource, onStep?: (msg: string) => void
 
 export interface VodInfo { tmdbId?: number; plot?: string; cast?: string; director?: string; genre?: string; duration?: string; backdrop?: string; trailer?: string; rating?: number; year?: number }
 
-export async function vodInfo(s: XtreamSource, id: number): Promise<VodInfo> {
-  const j = await fetchJson<{ info?: Record<string, unknown> }>(api(s, 'get_vod_info', `&vod_id=${id}`), s.ua);
+/* ---------------- richieste di dettaglio: in coda, in cache e con nuovo tentativo su 429 ----------------
+   Molti provider limitano le richieste al secondo: scorrendo la home o la guida non vanno mandate a raffica. */
+const MAX_PARALLEL = 2;
+/** oltre questo tempo si smette di aspettare: meglio "riprova" che una schermata bloccata */
+const TIMEOUT_MS = 25000;
+/** intervallo minimo tra due chiamate: alcuni provider (Cloudflare) bloccano l'IP per minuti dopo una raffica */
+const MIN_GAP_MS = 400;
+/** le chiamate in background (guida, anteprime) partono al massimo una ogni 2,5 s */
+const BG_GAP_MS = 2500;
+let lastBg = 0;
+/** una richiesta aperta dall'utente aspetta la fine di un blocco solo se è breve */
+const MAX_WAIT_MS = 20000;
+let running = 0;
+let lastStart = 0;
+const waiting: (() => void)[] = [];
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** 502-504 e 520-524 = server del provider lento o giù (errori Cloudflare) */
+const flaky = (st: number) => (st >= 502 && st <= 504) || (st >= 520 && st <= 524);
+/** dopo un 429 nessuna richiesta parte fino a questo istante: insistere allungherebbe il blocco */
+// resta valida anche ricaricando la pagina: Cloudflare (errore 1015) può bloccare l'IP per decine di minuti
+const COOL_KEY = 'orbita.providerPause';
+let coolUntil = (() => {
+  try {
+    return Number(localStorage.getItem(COOL_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+})();
+const setCool = (until: number) => {
+  coolUntil = Math.max(coolUntil, until);
+  try {
+    localStorage.setItem(COOL_KEY, String(coolUntil));
+  } catch {
+    /* storage non disponibile */
+  }
+};
+/** "44 min" o "50 s": per i messaggi di attesa */
+export const waitLabel = (sec: number) => (sec >= 120 ? `${Math.ceil(sec / 60)} min` : `${sec} s`);
+/** secondi di pausa rimasti dopo un 429 (0 = si può chiedere) */
+export const cooldownLeft = () => Math.max(0, Math.ceil((coolUntil - Date.now()) / 1000));
+const busy = () => new ApiError(t('err.busy', { s: waitLabel(cooldownLeft()) }), 429);
+
+async function withTimeout<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
+  try {
+    return await fn(ac.signal);
+  } catch (e) {
+    if ((e as Error).name === 'AbortError') throw new ApiError(t('err.timeout'), 408); // niente secondo tentativo: altri 25 s di attesa sarebbero troppi
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Coda delle chiamate al provider. `urgent` = chiesta dall'utente (episodi, scheda): passa davanti
+ * a quelle in background (guida dei canali, anteprime della home), che durante un blocco non partono.
+ */
+async function queued<T>(fn: (signal: AbortSignal) => Promise<T>, urgent = false): Promise<T> {
+  const cooling = () => coolUntil - Date.now();
+  if (cooling() > (urgent ? MAX_WAIT_MS : 0)) throw busy();
+  if (running >= MAX_PARALLEL) await new Promise<void>((r) => (urgent ? waiting.unshift(r) : waiting.push(r)));
+  running++;
+  try {
+    for (let attempt = 0; ; attempt++) {
+      if (cooling() > 0) {
+        if (!urgent || cooling() > MAX_WAIT_MS) throw busy();
+        await sleep(cooling());
+      }
+      const gap = Math.max(lastStart + MIN_GAP_MS, urgent ? 0 : lastBg + BG_GAP_MS) - Date.now();
+      if (gap > 0) await sleep(gap);
+      if (!urgent && cooling() > 0) throw busy(); // nel frattempo il provider ha messo in pausa
+      lastStart = Date.now();
+      if (!urgent) lastBg = lastStart;
+      try {
+        return await withTimeout(fn);
+      } catch (e) {
+        if (!(e instanceof ApiError)) throw e;
+        if (e.status === 429) {
+          // si rispetta tutta la pausa chiesta (fino a un'ora): riprovare prima può allungare il blocco
+          setCool(Date.now() + Math.min(3600, e.retryAfter || 60) * 1000);
+          if (!urgent || attempt >= 1) throw cooling() > 0 ? busy() : e;
+        } else if (!flaky(e.status) || !urgent || attempt >= 1) throw e;
+        else await sleep(3000);
+      }
+    }
+  } finally {
+    running--;
+    waiting.shift()?.();
+  }
+}
+
+const DETAIL_TTL = 15 * 60 * 1000;
+const details = new Map<string, { at: number; p: Promise<unknown> }>();
+/* Copia sul dispositivo (cifrata: le risposte possono contenere link con credenziali) delle schede
+   già aperte: se il provider è lento o giù, la serie si apre lo stesso e si aggiorna appena possibile. */
+const SAVED_MAX = 300;
+const savedKey = (url: string) => 'xd:' + hash(url);
+async function loadSaved<T>(url: string): Promise<T | undefined> {
+  try {
+    return (await sealGet<{ j: T }>(savedKey(url)))?.j;
+  } catch {
+    return undefined;
+  }
+}
+async function save(url: string, j: unknown) {
+  try {
+    const k = savedKey(url);
+    await sealSet(k, { j });
+    const idx = ((await kv.get<string[]>('xd:index')) || []).filter((x) => x !== k);
+    idx.push(k);
+    for (const old of idx.splice(0, Math.max(0, idx.length - SAVED_MAX))) await kv.del(old);
+    await kv.set('xd:index', idx);
+  } catch {
+    /* archivio non disponibile: si va avanti senza copia locale */
+  }
+}
+
+/** stessa richiesta = stessa risposta per qualche minuto (home, scheda e player la condividono);
+ *  con `keep` la risposta si salva sul dispositivo e si usa subito alla riapertura */
+function detail<T>(url: string, ua?: string, keep = false, background = false): Promise<T> {
+  const hit = details.get(url);
+  if (hit && Date.now() - hit.at < DETAIL_TTL) return hit.p as Promise<T>;
+  const fresh = queued((signal) => fetchJson<T>(url, ua, signal), !background);
+  details.set(url, { at: Date.now(), p: fresh });
+  fresh.then((j) => void (keep && save(url, j)), () => details.delete(url));
+  if (!keep) return fresh;
+  // copia locale se c'è (e intanto si aggiorna in background), altrimenti la risposta del provider
+  const p = loadSaved<T>(url).then((old) => (old !== undefined ? (fresh.catch(() => {}), old) : fresh));
+  details.set(url, { at: Date.now(), p });
+  fresh.then((j) => details.set(url, { at: Date.now(), p: Promise.resolve(j) }), () => {});
+  return p;
+}
+
+/** `background`: chiamata non chiesta dall'utente (anteprime della home), cede il passo e non insiste */
+export async function vodInfo(s: XtreamSource, id: number, background = false): Promise<VodInfo> {
+  const j = await detail<{ info?: Record<string, unknown> }>(api(s, 'get_vod_info', `&vod_id=${id}`), s.ua, true, background);
   const i = (j?.info || {}) as Record<string, unknown>;
   const bd = Array.isArray(i.backdrop_path) ? (i.backdrop_path[0] as string) : undefined;
   return {
@@ -151,9 +288,9 @@ export async function vodInfo(s: XtreamSource, id: number): Promise<VodInfo> {
   };
 }
 
-export async function seriesInfo(s: XtreamSource, series: Series): Promise<{ episodes: Episode[]; tmdbId?: number; plot?: string; backdrop?: string; cast?: string; genre?: string }> {
-  const j = await fetchJson<{ info?: Record<string, unknown>; episodes?: Record<string, Record<string, unknown>[]> }>(
-    api(s, 'get_series_info', `&series_id=${series.xid}`), s.ua);
+export async function seriesInfo(s: XtreamSource, series: Series, background = false): Promise<{ episodes: Episode[]; tmdbId?: number; plot?: string; backdrop?: string; cast?: string; genre?: string }> {
+  const j = await detail<{ info?: Record<string, unknown>; episodes?: Record<string, Record<string, unknown>[]> }>(
+    api(s, 'get_series_info', `&series_id=${series.xid}`), s.ua, true, background);
   const episodes: Episode[] = [];
   for (const [season, list] of Object.entries(j?.episodes || {})) {
     if (!Array.isArray(list)) continue;
@@ -190,8 +327,11 @@ function str(v: unknown): string | undefined {
 
 /** EPG breve (ora/dopo) dal provider. Titoli e descrizioni arrivano in Base64. */
 export async function shortEpg(s: XtreamSource, id: number, limit = 12): Promise<EpgItem[]> {
-  const j = await fetchJson<{ epg_listings?: Record<string, string>[] }>(api(s, 'get_simple_data_table', `&stream_id=${id}`), s.ua)
-    .catch(() => fetchJson<{ epg_listings?: Record<string, string>[] }>(api(s, 'get_short_epg', `&stream_id=${id}&limit=${limit}`), s.ua));
+  type R = { epg_listings?: Record<string, string>[] };
+  const j = await queued((sig) => fetchJson<R>(api(s, 'get_simple_data_table', `&stream_id=${id}`), s.ua, sig))
+    // l'altra azione solo se questa non esiste sul pannello, non se il provider sta limitando le richieste
+    .catch((e) => (e instanceof ApiError && (e.status === 429 || e.status === 408 || flaky(e.status)) ? Promise.reject(e)
+      : queued((sig) => fetchJson<R>(api(s, 'get_short_epg', `&stream_id=${id}&limit=${limit}`), s.ua, sig))));
   const now = Date.now() / 1000;
   return (j?.epg_listings || [])
     .map((x) => ({
