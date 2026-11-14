@@ -128,12 +128,38 @@ export async function setPin(pin: string) {
   state.settings.pin = await hashPin(pin);
   await saveSettings();
 }
+/* Tentativi sbagliati: dopo 5 il PIN resta bloccato, ogni volta più a lungo (30 s, 1 min, 2 min… fino a 15 min).
+   Un PIN di 4 cifre ha solo 10.000 combinazioni: senza blocco si possono provare tutte. */
+const PIN_KEY = 'orbita.pinGuard';
+const pinGuard = (): { n: number; until: number } => {
+  try {
+    const g = JSON.parse(localStorage.getItem(PIN_KEY) || '{}');
+    return { n: Number(g.n) || 0, until: Number(g.until) || 0 };
+  } catch {
+    return { n: 0, until: 0 };
+  }
+};
+const savePinGuard = (g: { n: number; until: number }) => {
+  try {
+    localStorage.setItem(PIN_KEY, JSON.stringify(g));
+  } catch {
+    /* storage non disponibile */
+  }
+};
+/** secondi di blocco rimasti dopo troppi PIN sbagliati (0 = si può provare) */
+export const pinLockLeft = () => Math.max(0, Math.ceil((pinGuard().until - Date.now()) / 1000));
+
 export async function unlock(pin: string): Promise<boolean> {
-  if (!state.settings.pin) return false;
+  if (!state.settings.pin || pinLockLeft() > 0) return false;
   const ok = await checkPin(pin, state.settings.pin);
+  const g = pinGuard();
   if (ok) {
+    savePinGuard({ n: 0, until: 0 });
     state.unlocked = true;
     emit();
+  } else {
+    const n = g.n + 1;
+    savePinGuard({ n, until: n >= 5 ? Date.now() + Math.min(900, 30 * 2 ** (n - 5)) * 1000 : 0 });
   }
   return ok;
 }

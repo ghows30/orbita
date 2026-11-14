@@ -1,6 +1,6 @@
 import { native } from '../core/api';
 import { kv } from '../core/store';
-import { active, clearHistory, emit, refreshActive, removeSource, saveSettings, setPin, state, switchSource, unlock } from '../state';
+import { active, clearHistory, emit, refreshActive, removeSource, saveSettings, pinLockLeft, setPin, state, switchSource, unlock } from '../state';
 import { askConfirm, askPin, h, icon, modal, toast } from './dom';
 import { phoneLink, sourceForm } from './onboard';
 import { currentTheme, setTheme, THEMES } from './theme';
@@ -147,7 +147,7 @@ export function settingsView(rerender: () => void): HTMLElement {
     if (!v && state.settings.pin) {
       const pin = await askPin(t('set.pinDisable'));
       if (!pin || !(await unlock(pin))) {
-        toast(t('set.pinWrong'), 'error');
+        toast(pinLockLeft() ? t('set.pinLocked', { s: pinLockLeft() }) : t('set.pinWrong'), 'error');
         return rerender();
       }
     }
@@ -166,7 +166,7 @@ export function settingsView(rerender: () => void): HTMLElement {
     ? h('button', { class: 'btn ghost', on: { click: async () => {
       if (state.unlocked) { state.unlocked = false; emit(); return rerender(); }
       const pin = await askPin(t('set.unlockPrompt'));
-      if (pin && (await unlock(pin))) { toast(t('set.unlocked'), 'ok'); rerender(); } else if (pin) toast(t('set.pinWrong'), 'error');
+      if (pin && (await unlock(pin))) { toast(t('set.unlocked'), 'ok'); rerender(); } else if (pin) toast(pinLockLeft() ? t('set.pinLocked', { s: pinLockLeft() }) : t('set.pinWrong'), 'error');
     } } }, icon('lock', 18), state.unlocked ? t('set.relock') : t('set.unlock'))
     : null;
 
