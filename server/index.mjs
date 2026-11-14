@@ -86,6 +86,13 @@ const CSP = [
   "frame-ancestors 'none'",
 ].join('; ');
 
+/* I contenuti inoltrati (stream, playlist, copertine) arrivano da server che non controlliamo e vengono
+   serviti dalla nostra origine: se qualcuno li aprisse come pagina non devono poter eseguire nulla.
+   "sandbox" toglie script e accesso all'origine; i tipi "attivi" diventano dati generici. */
+const UNTRUSTED = { 'content-security-policy': "default-src 'none'; sandbox", 'x-content-type-options': 'nosniff' };
+const ACTIVE_TYPE = /^(text\/html|application\/xhtml|image\/svg|text\/xml|application\/xml|text\/javascript|application\/(x-)?javascript|application\/ecmascript|text\/css)/i;
+const safeType = (ct) => (ACTIVE_TYPE.test(String(ct || '').trim()) ? 'application/octet-stream' : String(ct || 'application/octet-stream'));
+
 function send(res, status, body, headers = {}) {
   res.writeHead(status, { ...BASE_HEADERS, 'cache-control': 'no-store', ...headers });
   res.end(body);
@@ -145,7 +152,11 @@ const hosts = new Map();
 const hostOf = (u) => { try { return new URL(u).host; } catch { return ''; } };
 const gate = (host) => {
   let g = hosts.get(host);
-  if (!g) hosts.set(host, (g = { active: 0, queue: [], coolUntil: 0 }));
+  if (!g) {
+    // una playlist con migliaia di host diversi non deve far crescere la mappa all'infinito
+    if (hosts.size > 2000) for (const [k, v] of hosts) if (!v.active && !v.queue.length && v.coolUntil < Date.now()) hosts.delete(k);
+    hosts.set(host, (g = { active: 0, queue: [], coolUntil: 0 }));
+  }
   return g;
 };
 function noteStatus(url, status, retryAfter) {
@@ -160,6 +171,7 @@ async function withLogoSlot(url, fn) {
   // registro: quante copertine per host (la prima e poi ogni 50), per capire se pesano sul provider
   const h = hostOf(url);
   const n = (logoCount.get(h) || 0) + 1;
+  if (logoCount.size > 2000) logoCount.clear();
   logoCount.set(h, n);
   if (n === 1 || n % 50 === 0) console.log(`[orbita] copertine da ${h}: ${n}`);
   const g = gate(h);
@@ -188,7 +200,10 @@ async function apiFetch(req, res) {
   try {
     const u = new URL(b.url);
     const q = u.searchParams;
-    what = `${u.host} ${q.get('action') || u.pathname.split('/').pop()}${['series_id', 'vod_id', 'stream_id'].map((k) => (q.get(k) ? ` ${k}=${q.get(k)}` : '')).join('')}`;
+    const safe = (v) => (/^[\w.-]{1,40}$/.test(v || '') ? v : '…');
+    const isApi = u.pathname.endsWith('/player_api.php');
+    // solo host, azione Xtream e id numerici: mai pezzi di percorso o altri parametri (possono contenere credenziali o chiavi)
+    what = `${u.host} ${isApi ? safe(q.get('action') || 'login') : '(richiesta)'}${isApi ? ['series_id', 'vod_id', 'stream_id'].map((k) => (/^\d{1,12}$/.test(q.get(k) || '') ? ` ${k}=${q.get(k)}` : '')).join('') : ''}`;
   } catch { /* URL già validato più avanti */ }
   const t0 = Date.now();
   console.log(`[orbita] → ${what}`);
@@ -235,11 +250,11 @@ async function proxyStream(req, res, id) {
   if (isHls(ct, finalUrl)) {
     const text = (await readBody(up, MAX_HLS)).toString('utf8');
     if (text.trimStart().startsWith('#EXTM3U')) {
-      return send(res, 200, rewriteHls(text, finalUrl, t.ua), { 'content-type': 'application/vnd.apple.mpegurl' });
+      return send(res, 200, rewriteHls(text, finalUrl, t.ua), { ...UNTRUSTED, 'content-type': 'application/vnd.apple.mpegurl' });
     }
-    return send(res, 200, text, { 'content-type': ct });
+    return send(res, 200, text, { ...UNTRUSTED, 'content-type': safeType(ct) });
   }
-  const h = { ...BASE_HEADERS, 'content-type': ct, 'cache-control': 'no-store' };
+  const h = { ...BASE_HEADERS, ...UNTRUSTED, 'content-type': safeType(ct), 'cache-control': 'no-store' };
   for (const k of ['content-length', 'content-range', 'accept-ranges']) if (up.headers[k]) h[k] = up.headers[k];
   res.writeHead(up.statusCode === 206 ? 206 : 200, h);
   up.pipe(res);
@@ -248,9 +263,20 @@ async function proxyStream(req, res, id) {
 
 /* logo/poster: solo immagini, cache in memoria */
 const logoCache = new Map();
+let logoBytes = 0;
+const MAX_LOGO_CACHE = 160 * 1024 * 1024; // tetto alla memoria: 3000 immagini da 3 MB sarebbero 9 GB
+function cacheLogo(key, entry) {
+  logoCache.set(key, entry);
+  logoBytes += entry.body.length;
+  while ((logoBytes > MAX_LOGO_CACHE || logoCache.size > 3000) && logoCache.size > 1) {
+    const [k, v] = logoCache.entries().next().value;
+    logoCache.delete(k);
+    logoBytes -= v.body.length;
+  }
+}
 async function proxyLogo(req, res, raw) {
   const hit = logoCache.get(raw);
-  if (hit) return send(res, 200, hit.body, { 'content-type': hit.ct, 'cache-control': 'private, max-age=86400' });
+  if (hit) return send(res, 200, hit.body, { ...UNTRUSTED, 'content-type': hit.ct, 'cache-control': 'private, max-age=86400' });
   let up;
   try {
     ({ res: up } = await withLogoSlot(raw, () => guardedGet(raw, { timeoutMs: 12000 })));
@@ -265,11 +291,10 @@ async function proxyLogo(req, res, raw) {
     return send(res, 404, '');
   }
   const body = await readBody(up, MAX_LOGO);
-  // gli SVG possono contenere script: li serviamo con CSP che li neutralizza
-  const extra = /svg/i.test(ct) ? { 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'" } : {};
-  if (logoCache.size > 3000) logoCache.delete(logoCache.keys().next().value);
-  logoCache.set(raw, { body, ct });
-  send(res, 200, body, { 'content-type': ct, 'cache-control': 'private, max-age=86400', ...extra });
+  // gli SVG possono contenere script: come <img> non li eseguono, e aperti da soli li blocca la CSP "sandbox"
+  const type = /svg/i.test(ct) ? 'image/svg+xml' : ct.split(';')[0].trim().toLowerCase();
+  cacheLogo(raw, { body, ct: type });
+  send(res, 200, body, { ...UNTRUSTED, 'content-type': type, 'cache-control': 'private, max-age=86400' });
 }
 
 /* ---------------- statici ---------------- */

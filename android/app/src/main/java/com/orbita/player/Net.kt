@@ -2,6 +2,7 @@ package com.orbita.player
 
 import okhttp3.Dns
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -25,6 +26,7 @@ class TooBigException : IOException("Risposta troppo grande")
  */
 object Net {
     const val DEFAULT_UA = "VLC/3.0.21 LibVLC/3.0.21"
+    private val IPV4 = Regex("""^\d{1,3}(\.\d{1,3}){3}$""")
 
     fun blocked(a: InetAddress): Boolean {
         if (a.isLoopbackAddress || a.isAnyLocalAddress || a.isLinkLocalAddress || a.isMulticastAddress) return true
@@ -36,12 +38,34 @@ object Net {
             if (o0 == 100 && o1 in 64..127) return true // CGNAT
             if (o0 == 169 && o1 == 254) return true // metadata cloud
         }
-        if (a is Inet6Address) {
-            // ::ffff:127.0.0.1 ecc.
-            val mapped = b.size == 16 && (0 until 10).all { b[it].toInt() == 0 } && b[10].toInt() == -1 && b[11].toInt() == -1
-            if (mapped) return blocked(InetAddress.getByAddress(b.copyOfRange(12, 16)))
+        if (a is Inet6Address && b.size == 16) {
+            // IPv6 che contengono un IPv4: vale il giudizio su quell'IPv4 (altrimenti "::ffff:7f00:1" = 127.0.0.1 passa)
+            fun zero(from: Int, to: Int) = (from until to).all { b[it].toInt() == 0 }
+            fun v4(at: Int) = blocked(InetAddress.getByAddress(b.copyOfRange(at, at + 4)))
+            val g0 = ((b[0].toInt() and 0xff) shl 8) or (b[1].toInt() and 0xff)
+            val g1 = ((b[2].toInt() and 0xff) shl 8) or (b[3].toInt() and 0xff)
+            if (zero(0, 10) && b[10].toInt() == -1 && b[11].toInt() == -1) return v4(12) // ::ffff:a.b.c.d
+            if (zero(0, 12)) return v4(12) // ::a.b.c.d (compatibile)
+            if (g0 == 0x64 && g1 == 0xff9b && zero(4, 12)) return v4(12) // NAT64
+            if (g0 == 0x2002) return v4(2) // 6to4
+            if (g0 == 0x2001 && g1 == 0) return true // Teredo
         }
         return false
+    }
+
+    /**
+     * Il [Dns] personalizzato NON viene interpellato quando l'URL contiene direttamente un IP
+     * ("http://127.0.0.1:8765/…"): per questo il controllo vero è qui, sull'indirizzo a cui la
+     * connessione si è effettivamente collegata. Vale per ogni richiesta e per ogni redirect.
+     */
+    private val guardSocket = Interceptor { chain ->
+        val route = chain.connection()?.route()
+        // con un proxy di rete la connessione va al proxy: lì l'IP finale non è nostro da verificare
+        if (route != null && route.proxy.type() == java.net.Proxy.Type.DIRECT) {
+            val addr = route.socketAddress.address
+            if (addr == null || blocked(addr)) throw BlockedException("Indirizzo non consentito")
+        }
+        chain.proceed(chain.request())
     }
 
     private val guardDns = object : Dns {
@@ -55,6 +79,7 @@ object Net {
 
     val client: OkHttpClient = OkHttpClient.Builder()
         .dns(guardDns)
+        .addNetworkInterceptor(guardSocket)
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .followRedirects(true)
@@ -80,6 +105,10 @@ object Net {
         if (raw == null || raw.length > 8192) return null
         val u = raw.trim().toHttpUrlOrNull() ?: return null
         if (u.scheme != "http" && u.scheme != "https") return null
+        // IP scritto direttamente nell'URL: si rifiuta subito, senza nemmeno aprire la connessione
+        val literal = u.host.contains(':') || IPV4.matches(u.host)
+        if (literal && blocked(InetAddress.getByName(u.host))) return null
+        if (u.host.equals("localhost", true) || u.host.endsWith(".localhost", true)) return null
         return u.toString()
     }
 

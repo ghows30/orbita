@@ -35,6 +35,8 @@ class Remote(private val ctx: Context, private val onSource: (String) -> Unit) {
     @Volatile private var failures = 0
     @Volatile private var startedAt = 0L
     @Volatile private var mode = "source"
+    /** "ip:porta" con cui il telefono deve averci chiamato (difesa da DNS rebinding e da pagine di altri siti) */
+    @Volatile private var authority = ""
 
     /** Avvia (o riavvia) la sessione; restituisce {url, code, qr} oppure null se la TV non è in rete locale. */
     @Synchronized
@@ -42,7 +44,8 @@ class Remote(private val ctx: Context, private val onSource: (String) -> Unit) {
         stop()
         this.mode = if (mode == "keys") "keys" else "source"
         val ip = lanAddress() ?: return null
-        val ss = PORTS.firstNotNullOfOrNull { p -> runCatching { ServerSocket(p, 8) }.getOrNull() } ?: return null
+        // in ascolto solo sull'indirizzo della rete di casa, non su tutte le interfacce
+        val ss = PORTS.firstNotNullOfOrNull { p -> runCatching { ServerSocket(p, 8, ip) }.getOrNull() } ?: return null
         code = (100000 + rnd.nextInt(900000)).toString()
         state = "waiting"
         message = ""
@@ -50,7 +53,8 @@ class Remote(private val ctx: Context, private val onSource: (String) -> Unit) {
         startedAt = System.currentTimeMillis()
         server = ss
         Thread({ loop(ss) }, "orbita-remote").apply { isDaemon = true }.start()
-        val base = "http://${ip.hostAddress}:${ss.localPort}"
+        authority = "${ip.hostAddress}:${ss.localPort}"
+        val base = "http://$authority"
         return JSONObject()
             .put("url", base)
             .put("code", code)
@@ -95,24 +99,42 @@ class Remote(private val ctx: Context, private val onSource: (String) -> Unit) {
         if (parts.size < 3) return send(out, 400, "text/plain", "")
         val (method, target) = parts
         var length = 0
+        var host = ""
+        var origin = ""
+        var ctype = ""
+        var headers = 0
         while (true) {
             val h = readLine(input) ?: return
             if (h.isEmpty()) break
+            if (++headers > 60) return send(out, 400, "text/plain", "")
             if (h.startsWith("content-length:", true)) length = h.substringAfter(':').trim().toIntOrNull() ?: -1
+            else if (h.startsWith("host:", true)) host = h.substringAfter(':').trim()
+            else if (h.startsWith("origin:", true)) origin = h.substringAfter(':').trim()
+            else if (h.startsWith("content-type:", true)) ctype = h.substringAfter(':').trim().lowercase()
         }
+        // il browser deve aver chiamato proprio questo indirizzo: una pagina di un altro sito (o un dominio
+        // che si fa risolvere sull'IP della TV) non passa
+        if (!host.equals(authority, true)) return send(out, 421, "text/plain", "")
+        if (origin.isNotEmpty() && !origin.equals("http://$authority", true)) return send(out, 403, "text/plain", "")
         val path = target.substringBefore('?')
         val query = target.substringAfter('?', "")
         when {
             method == "GET" && path == "/" -> send(out, 200, "text/html", page())
             method == "GET" && path == "/status" -> {
-                if (param(query, "c") != code) return send(out, 403, "application/json", """{"state":"denied"}""")
+                // anche qui i codici sbagliati si contano: altrimenti /status permetterebbe di provarli tutti
+                if (!sameCode(param(query, "c"))) {
+                    if (++failures >= MAX_FAILURES) stop()
+                    return send(out, 403, "application/json", """{"state":"denied"}""")
+                }
                 send(out, 200, "application/json", JSONObject().put("state", state).put("msg", message).toString())
             }
             method == "POST" && path == "/add" -> {
+                // solo JSON dichiarato: un modulo o una fetch "semplice" da un altro sito non può arrivare fin qui
+                if (!ctype.startsWith("application/json")) return send(out, 415, "application/json", err(L10n.t("missing")))
                 if (length !in 1..MAX_BODY) return send(out, 413, "application/json", err(L10n.t("tooBig")))
                 val body = JSONObject(String(readN(input, length), Charsets.UTF_8))
-                if (body.optString("code") != code) {
-                    if (++failures >= 5) {
+                if (!sameCode(body.optString("code"))) {
+                    if (++failures >= MAX_FAILURES) {
                         send(out, 403, "application/json", err(L10n.t("tooManyCodes")))
                         return stop()
                     }
@@ -134,6 +156,10 @@ class Remote(private val ctx: Context, private val onSource: (String) -> Unit) {
         .replaceFirst("<html lang=\"it\">", "<html lang=\"${L10n.lang}\" data-mode=\"$mode\">")
 
     private fun err(m: String) = JSONObject().put("error", m).toString()
+
+    /** confronto a tempo costante: il tempo di risposta non rivela quante cifre sono giuste */
+    private fun sameCode(given: String?): Boolean =
+        code.isNotEmpty() && given != null && java.security.MessageDigest.isEqual(given.toByteArray(Charsets.UTF_8), code.toByteArray(Charsets.UTF_8))
 
     private fun param(q: String, k: String) =
         q.split('&').firstOrNull { it.startsWith("$k=") }?.substringAfter('=')
@@ -205,6 +231,7 @@ class Remote(private val ctx: Context, private val onSource: (String) -> Unit) {
     companion object {
         private val PORTS = listOf(8765, 8766, 8767, 0)
         private const val MAX_BODY = 32 * 1024
+        private const val MAX_FAILURES = 5
         private const val TTL_MS = 15 * 60 * 1000L
         private val rnd = SecureRandom()
     }
