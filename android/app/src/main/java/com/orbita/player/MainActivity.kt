@@ -225,7 +225,7 @@ class MainActivity : Activity() {
     /* ---------------- origine interna ---------------- */
     private inner class Client : WebViewClient() {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
-            request.url.host != HOST // nessuna navigazione fuori dall'app
+            request.url.scheme != "https" || request.url.host != HOST // nessuna navigazione fuori dall'app
 
         override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse {
             val url = request.url
@@ -253,8 +253,12 @@ class MainActivity : Activity() {
                 val r = Net.get(b.optString("url"), ua)
                 if (!r.isSuccessful) {
                     val code = r.code
+                    // Retry-After dei 429: l'app web aspetta quanto chiede il provider invece di insistere
+                    val retry = r.header("Retry-After")?.trim()?.toLongOrNull()
                     r.close()
-                    json(502, JSONObject().put("error", "Il provider ha risposto con errore $code.").put("status", code).toString())
+                    val o = JSONObject().put("error", "Il provider ha risposto con errore $code.").put("status", code)
+                    if (retry != null && retry > 0) o.put("retryAfter", retry)
+                    json(502, o.toString())
                 } else {
                     resp(200, "text/plain", Net.limited(r.body!!.byteStream(), 250L * 1024 * 1024))
                 }
