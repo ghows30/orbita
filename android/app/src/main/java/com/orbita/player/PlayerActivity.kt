@@ -38,6 +38,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
+import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import org.json.JSONArray
@@ -257,6 +258,20 @@ class PlayerActivity : Activity() {
         ui.postDelayed(::tickClock, 15_000)
     }
 
+    /**
+     * Un segmento perso si riprova più volte prima di far fallire la riproduzione; ma un rifiuto netto
+     * (indirizzo bloccato, 4xx su film ed episodi) va mostrato subito: riprovarlo in silenzio per un
+     * minuto sembra un caricamento infinito.
+     */
+    private val retryPolicy = object : DefaultLoadErrorHandlingPolicy(8) {
+        override fun getRetryDelayMsFor(info: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
+            val chain = generateSequence<Throwable>(info.exception) { it.cause }
+            if (chain.any { it is BlockedException }) return C.TIME_UNSET
+            if (!live && chain.filterIsInstance<HttpDataSource.InvalidResponseCodeException>().any { it.responseCode in 400..499 }) return C.TIME_UNSET
+            return super.getRetryDelayMsFor(info)
+        }
+    }
+
     private fun buildPlayer() {
         val http = OkHttpDataSource.Factory(Net.streamClient).setUserAgent(Net.cleanUa(ua))
         val renderers = DefaultRenderersFactory(this)
@@ -270,7 +285,7 @@ class PlayerActivity : Activity() {
         // un segmento HLS perso si riprova più volte prima di far fallire la riproduzione
         val sources = DefaultMediaSourceFactory(this)
             .setDataSourceFactory(http)
-            .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(8))
+            .setLoadErrorHandlingPolicy(retryPolicy)
         player = ExoPlayer.Builder(this, renderers)
             .setMediaSourceFactory(sources)
             .setLoadControl(load)
@@ -330,12 +345,19 @@ class PlayerActivity : Activity() {
             load(resume = false)
             return
         }
+        val block = generateSequence<Throwable>(e) { it.cause }.filterIsInstance<BlockedException>().firstOrNull()
+        if (block != null) {
+            status(L10n.t("blocked", block.message ?: ""))
+            spinner.visibility = View.GONE
+            return
+        }
         // 401/403/404: riprovare non serve (abbonamento, link scaduto, contenuto rimosso)
         val http = generateSequence<Throwable>(e) { it.cause }.filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()
         if (http != null && http.responseCode in 400..499) {
             status(when (http.responseCode) {
                 401, 403 -> L10n.t("denied", http.responseCode)
                 404 -> L10n.t("notFound")
+                429 -> L10n.t("busy")
                 else -> L10n.t("rejected", http.responseCode)
             })
             spinner.visibility = View.GONE

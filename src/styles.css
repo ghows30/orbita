@@ -125,7 +125,7 @@ body.onboarding .main { padding-left: 0; }
   background: linear-gradient(90deg, rgba(var(--bg-rgb), 0.92) 0%, rgba(var(--bg-rgb), 0.55) 70%, rgba(var(--bg-rgb), 0) 100%);
   overflow: hidden; transition: width 0.35s var(--ease), background 0.35s;
 }
-.sidebar:hover, body.nav-open .sidebar { width: var(--side-open); background: linear-gradient(90deg, var(--bg) 0%, rgba(var(--bg-rgb), 0.97) 70%, rgba(var(--bg-rgb), 0) 100%); }
+body.nav-open .sidebar { width: var(--side-open); background: linear-gradient(90deg, var(--bg) 0%, rgba(var(--bg-rgb), 0.97) 70%, rgba(var(--bg-rgb), 0) 100%); }
 .brand { display: flex; align-items: center; gap: 16px; padding: 4px 9px 30px; font-weight: 850; font-size: 18px; letter-spacing: 0.22em; white-space: nowrap; }
 .nav-items { display: flex; flex-direction: column; gap: 4px; flex: 1; }
 .nav-item {
@@ -134,7 +134,6 @@ body.onboarding .main { padding-left: 0; }
   position: relative;
 }
 .brand span, .nav-item span, .nav-src span { opacity: 0; transition: opacity 0.2s; }
-.sidebar:hover .brand span, .sidebar:hover .nav-item span, .sidebar:hover .nav-src span,
 body.nav-open .brand span, body.nav-open .nav-item span, body.nav-open .nav-src span { opacity: 1; }
 .nav-item:hover { background: var(--hover-2); color: var(--text); }
 .nav-item.on { color: var(--text); }
@@ -712,7 +711,7 @@ body.nav-open .brand span, body.nav-open .nav-item span, body.nav-open .nav-src 
   #app { display: grid; grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
   .main { height: calc(100vh - 64px); padding-left: 0; }
   body.nav-open .main { opacity: 1; transform: none; }
-  .sidebar, .sidebar:hover, body.nav-open .sidebar { position: static; width: auto; order: 2; flex-direction: row; padding: 6px 8px; background: var(--bg-2); border-top: 1px solid var(--line); }
+  .sidebar, body.nav-open .sidebar { position: static; width: auto; order: 2; flex-direction: row; padding: 6px 8px; background: var(--bg-2); border-top: 1px solid var(--line); }
   .nav-item span { display: none; }
   .brand, .nav-src { display: none; }
   .nav-items { flex-direction: row; justify-content: space-around; }

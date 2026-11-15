@@ -46,7 +46,11 @@ function renderNav() {
   );
 }
 
+let hover = false;
+const syncNav = () => document.body.classList.toggle('nav-open', hover || nav.contains(document.activeElement));
+
 function render() {
+  hover = false;
   document.body.classList.remove('nav-open');
   renderNav();
   clear(main);
@@ -116,9 +120,14 @@ async function boot() {
     toast(t('boot.storeError', { m: (e as Error).message }), 'error');
   }
   window.addEventListener('hashchange', render);
-  // barra laterale: si allarga quando il focus del telecomando ci entra
-  nav.addEventListener('focusin', () => document.body.classList.add('nav-open'));
-  nav.addEventListener('focusout', (e) => !nav.contains(e.relatedTarget as Node) && document.body.classList.remove('nav-open'));
+  // barra laterale: aperta solo finché il focus (o il mouse) è al suo interno. Lo stato si ricalcola
+  // da document.activeElement a ogni spostamento del focus: su TV l'evento focusout può mancare
+  // (elemento rimosso, WebView) e lo stato :hover resta "incollato" dopo un clic del telecomando.
+  document.addEventListener('focusin', syncNav);
+  document.addEventListener('focusout', () => setTimeout(syncNav));
+  nav.addEventListener('mouseenter', () => ((hover = true), syncNav()));
+  nav.addEventListener('mouseleave', () => ((hover = false), syncNav()));
+  document.addEventListener('keydown', () => hover && ((hover = false), setTimeout(syncNav)), true);
   document.addEventListener('keydown', spatial);
   document.addEventListener('keydown', (e) => {
     if (playerOpen() || document.querySelector('.modal-wrap')) return;

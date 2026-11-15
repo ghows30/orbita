@@ -32,6 +32,16 @@ object L10n {
         "rejected" to mapOf(
             "it" to "Il provider ha rifiutato la richiesta (%1\$d).", "en" to "The provider rejected the request (%1\$d).",
             "es" to "El proveedor rechazó la petición (%1\$d).", "de" to "Der Anbieter hat die Anfrage abgelehnt (%1\$d)."),
+        "busy" to mapOf(
+            "it" to "Il provider sta limitando le richieste (429). Riprova tra qualche minuto.",
+            "en" to "The provider is limiting requests (429). Try again in a few minutes.",
+            "es" to "El proveedor está limitando las peticiones (429). Inténtalo en unos minutos.",
+            "de" to "Der Anbieter begrenzt die Anfragen (429). Versuche es in ein paar Minuten erneut."),
+        "blocked" to mapOf(
+            "it" to "Indirizzo del flusso non consentito per sicurezza (%1\$s).",
+            "en" to "Stream address not allowed for security reasons (%1\$s).",
+            "es" to "Dirección del flujo no permitida por seguridad (%1\$s).",
+            "de" to "Stream-Adresse aus Sicherheitsgründen nicht erlaubt (%1\$s)."),
         "retry" to mapOf(
             "it" to "Connessione interrotta. Nuovo tentativo tra %1\$ds (%2\$d/%3\$d)",
             "en" to "Connection lost. Retrying in %1\$ds (%2\$d/%3\$d)",

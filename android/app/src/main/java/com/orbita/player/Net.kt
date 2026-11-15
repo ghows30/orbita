@@ -63,7 +63,7 @@ object Net {
         // con un proxy di rete la connessione va al proxy: lì l'IP finale non è nostro da verificare
         if (route != null && route.proxy.type() == java.net.Proxy.Type.DIRECT) {
             val addr = route.socketAddress.address
-            if (addr == null || blocked(addr)) throw BlockedException("Indirizzo non consentito")
+            if (addr == null || blocked(addr)) throw BlockedException(addr?.hostAddress ?: route.socketAddress.hostString)
         }
         chain.proceed(chain.request())
     }
